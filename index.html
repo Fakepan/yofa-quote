@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>佑發空調工程 — 報價 / 專案管理</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root { --brand:#1f3a8a; --gold:#d4a017; }
+  body{font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;}
+  .brand{color:var(--brand);} .bg-brand{background:var(--brand);}
+  .tab-active{background:var(--brand);color:#fff;}
+  input,select,textarea{outline:none;}
+  /* 列印：只顯示報價單，隱藏其他所有東西，且不含成本 */
+  #printArea{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea,#printArea *{visibility:visible;}
+    #printArea{display:block;position:absolute;left:0;top:0;width:100%;padding:24px;}
+    @page{margin:14mm;}
+  }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+<div id="app" class="flex min-h-screen"></div>
+
+<!-- 列印專用區（客戶版 PDF，絕不含成本/毛利） -->
+<div id="printArea"></div>
+
+<script>
+// ====================== 資料層（localStorage）======================
+const LS_KEY = "yofa_data_v1";
+const DEFAULT_DATA = {
+  company: {
+    name:"佑發空調工程服務有限公司", taxId:"27975383", owner:"蕭素貞",
+    address:"臺北市松山區復興北路201號6樓之3", phone:"02-89215770", logo:""
+  },
+  customers: [],
+  quotes: [],
+  seq: { quote: 0 }
+};
+const STATUS = ["報價中","洽談中","施工中","待驗收","請款中","已結案"];
+const STATUS_COLOR = {
+  "報價中":"bg-slate-200 text-slate-700","洽談中":"bg-blue-100 text-blue-700",
+  "施工中":"bg-amber-100 text-amber-700","待驗收":"bg-purple-100 text-purple-700",
+  "請款中":"bg-orange-100 text-orange-700","已結案":"bg-emerald-100 text-emerald-700"
+};
+const TAX_RATE = 0.05;
+
+let D = load();
+function load(){
+  try{ const d = JSON.parse(localStorage.getItem(LS_KEY)); if(d) return Object.assign(structuredClone(DEFAULT_DATA), d); }catch(e){}
+  return structuredClone(DEFAULT_DATA);
+}
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(D)); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function fmt(n){ return "NT$ "+Math.round(n||0).toLocaleString("en-US"); }
+function num(v){ const n=parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+
+// ====================== 計算 ======================
+function quoteTotals(q){
+  let sub=0, cost=0;
+  (q.items||[]).forEach(it=>{ sub += num(it.qty)*num(it.unitPrice); cost += num(it.qty)*num(it.cost); });
+  const tax = Math.round(sub*TAX_RATE);
+  return { sub, tax, total: sub+tax, cost, margin: sub-cost, marginRate: sub? (sub-cost)/sub : 0 };
+}
+
+// ====================== 路由 / 渲染 ======================
+let view = "quotes";       // quotes | board | customers | settings | edit
+let editingId = null;
+let quoteFilter = { q:"", status:"" };
+
+function go(v){ view=v; render(); window.scrollTo(0,0); }
+
+function render(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <aside class="w-52 bg-white border-r border-slate-200 shrink-0 hidden md:flex flex-col">
+      <div class="p-4 border-b border-slate-100">
+        <div class="brand font-bold text-lg leading-tight">佑發空調工程</div>
+        <div class="text-xs text-slate-400 mt-0.5">報價 / 專案管理 v1</div>
+      </div>
+      <nav class="flex-1 p-2 space-y-1 text-sm">
+        ${navBtn("quotes","📋 報價中心")}
+        ${navBtn("board","🗂️ 專案看板")}
+        ${navBtn("customers","👤 客戶")}
+        ${navBtn("settings","⚙️ 設定 / 備份")}
+      </nav>
+      <div class="p-3 text-[11px] text-slate-400 border-t border-slate-100">
+        資料自動存於本機瀏覽器
+      </div>
+    </aside>
+    <main class="flex-1 min-w-0">
+      <div class="md:hidden bg-white border-b border-slate-200 flex overflow-x-auto text-sm">
+        ${["quotes","board","customers","settings"].map(v=>`<button onclick="go('${v}')" class="px-3 py-2 whitespace-nowrap ${view===v?'tab-active':''}">${({quotes:'報價',board:'看板',customers:'客戶',settings:'設定'})[v]}</button>`).join("")}
+      </div>
+      <div class="p-4 md:p-6">${renderView()}</div>
+    </main>`;
+}
+function navBtn(v,label){ return `<button onclick="go('${v}')" class="w-full text-left px-3 py-2 rounded-md ${view===v?'tab-active':'hover:bg-slate-100'}">${label}</button>`; }
+
+function renderView(){
+  if(view==="quotes") return viewQuotes();
+  if(view==="edit") return viewEdit();
+  if(view==="board") return viewBoard();
+  if(view==="customers") return viewCustomers();
+  if(view==="settings") return viewSettings();
+  return "";
+}
+
+// ====================== 報價中心 ======================
+function viewQuotes(){
+  let list = D.quotes.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+  if(quoteFilter.q){ const k=quoteFilter.q.toLowerCase(); list=list.filter(q=> (q.quoteNo||"").toLowerCase().includes(k) || (q.title||"").toLowerCase().includes(k) || (q.customerName||"").toLowerCase().includes(k)); }
+  if(quoteFilter.status) list=list.filter(q=>q.status===quoteFilter.status);
+  return `
+  <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+    <div><h1 class="text-2xl font-bold">報價中心</h1>
+    <p class="text-sm text-slate-500">共 ${D.quotes.length} 筆。匯入舊 Excel、或新建一份；可複製舊報價快速改。</p></div>
+    <div class="flex gap-2">
+      <label class="px-3 py-2 bg-white border border-slate-300 rounded-md text-sm cursor-pointer hover:border-brand">
+        📥 匯入 Excel<input type="file" accept=".xlsx,.xls,.xlsm" multiple class="hidden" onchange="importExcel(event)">
+      </label>
+      <button onclick="newQuote()" class="px-3 py-2 bg-brand text-white rounded-md text-sm">＋ 新增報價</button>
+    </div>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+    <input class="border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="搜尋 單號 / 工程 / 客戶…" value="${esc(quoteFilter.q)}" oninput="quoteFilter.q=this.value;rerenderList()">
+    <select class="border border-slate-300 rounded-md px-3 py-2 text-sm" onchange="quoteFilter.status=this.value;rerenderList()">
+      <option value="">全部狀態</option>${STATUS.map(s=>`<option ${quoteFilter.status===s?'selected':''}>${s}</option>`).join("")}
+    </select>
+  </div>
+  <div id="quoteList" class="bg-white rounded-lg border border-slate-200 overflow-hidden">${quoteRows(list)}</div>`;
+}
+function rerenderList(){
+  let list = D.quotes.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+  if(quoteFilter.q){ const k=quoteFilter.q.toLowerCase(); list=list.filter(q=> (q.quoteNo||"").toLowerCase().includes(k) || (q.title||"").toLowerCase().includes(k) || (q.customerName||"").toLowerCase().includes(k)); }
+  if(quoteFilter.status) list=list.filter(q=>q.status===quoteFilter.status);
+  const el=document.getElementById("quoteList"); if(el) el.innerHTML=quoteRows(list);
+}
+function quoteRows(list){
+  if(!list.length) return `<div class="p-10 text-center text-slate-400 text-sm">沒有符合的報價。匯入 Excel 或按「新增報價」。</div>`;
+  return `<table class="w-full text-sm">
+    <thead class="text-xs text-slate-500 bg-slate-50"><tr>
+      <th class="text-left p-2">單號</th><th class="text-left">工程名稱</th><th class="text-left">客戶</th>
+      <th class="text-center">項目</th><th class="text-right">總額</th><th class="text-center">狀態</th><th class="text-right p-2">動作</th>
+    </tr></thead><tbody>
+    ${list.map(q=>{const t=quoteTotals(q);return `<tr class="border-t border-slate-100 hover:bg-slate-50">
+      <td class="p-2 font-mono text-xs"><button class="brand hover:underline" onclick="editQuote('${q.id}')">${esc(q.quoteNo)||'(未命名)'}</button></td>
+      <td class="max-w-[14rem] truncate">${esc(q.title)}</td>
+      <td class="text-xs text-slate-600">${esc(q.customerName)||'—'}</td>
+      <td class="text-center text-xs">${(q.items||[]).length}</td>
+      <td class="text-right">${fmt(t.total)}</td>
+      <td class="text-center"><span class="text-[11px] px-2 py-0.5 rounded ${STATUS_COLOR[q.status]||''}">${q.status||'報價中'}</span></td>
+      <td class="text-right p-2 whitespace-nowrap">
+        <button class="text-xs brand hover:underline" onclick="editQuote('${q.id}')">開啟</button>
+        <button class="text-xs text-slate-500 hover:underline ml-1" onclick="cloneQuote('${q.id}')">複製</button>
+        <button class="text-xs text-red-500 hover:underline ml-1" onclick="delQuote('${q.id}')">刪</button>
+      </td></tr>`;}).join("")}
+    </tbody></table>`;
+}
+
+// ====================== 新增 / 複製 / 刪除 ======================
+function nextQuoteNo(){ D.seq.quote=(D.seq.quote||0)+1; const y=new Date().getFullYear(); return `Q${y}-${String(D.seq.quote).padStart(4,"0")}`; }
+function newQuote(){
+  const q={id:uid(),quoteNo:nextQuoteNo(),customerId:"",customerName:"",projectType:"",title:"",issuedAt:today(),status:"報價中",notes:"",items:[],createdAt:Date.now()};
+  D.quotes.push(q); save(); editingId=q.id; go("edit");
+}
+function cloneQuote(id){
+  const s=D.quotes.find(x=>x.id===id); if(!s)return;
+  const q=structuredClone(s); q.id=uid(); q.quoteNo=nextQuoteNo(); q.title="複製："+s.title; q.status="報價中"; q.createdAt=Date.now();
+  D.quotes.push(q); save(); editingId=q.id; go("edit");
+}
+function delQuote(id){ if(!confirm("確定刪除此報價？"))return; D.quotes=D.quotes.filter(x=>x.id!==id); save(); rerenderList(); }
+function editQuote(id){ editingId=id; go("edit"); }
+
+// ====================== 報價編輯 ======================
+function viewEdit(){
+  const q=D.quotes.find(x=>x.id===editingId); if(!q) return `<div>找不到報價 <button class="brand underline" onclick="go('quotes')">返回</button></div>`;
+  const t=quoteTotals(q);
+  return `
+  <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+    <button onclick="go('quotes')" class="text-sm text-slate-500 hover:underline">← 返回列表</button>
+    <div class="flex gap-2">
+      <button onclick="printQuote('${q.id}')" class="px-3 py-2 bg-brand text-white rounded-md text-sm">🖨️ 客戶版 PDF（列印另存）</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-lg border border-slate-200 p-4 mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+      <label>報價單號<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(q.quoteNo)}" onchange="setQ('${q.id}','quoteNo',this.value)"></label>
+      <label>工程類型<input class="w-full border rounded px-2 py-1 mt-1" placeholder="分離式冷氣施工" value="${esc(q.projectType)}" onchange="setQ('${q.id}','projectType',this.value)"></label>
+      <label>狀態<select class="w-full border rounded px-2 py-1 mt-1" onchange="setQ('${q.id}','status',this.value)">${STATUS.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join("")}</select></label>
+      <label class="md:col-span-2">工程名稱<input class="w-full border rounded px-2 py-1 mt-1" placeholder="信義區辦公大樓冷氣汰換" value="${esc(q.title)}" onchange="setQ('${q.id}','title',this.value)"></label>
+      <label>報價日期<input type="date" class="w-full border rounded px-2 py-1 mt-1" value="${esc(q.issuedAt)}" onchange="setQ('${q.id}','issuedAt',this.value)"></label>
+      <label class="md:col-span-2">客戶<input class="w-full border rounded px-2 py-1 mt-1" list="custList" placeholder="輸入或選擇客戶" value="${esc(q.customerName)}" onchange="setCustomer('${q.id}',this.value)">
+        <datalist id="custList">${D.customers.map(c=>`<option value="${esc(c.name)}">`).join("")}</datalist></label>
+      <label class="md:col-span-1">備註<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(q.notes)}" onchange="setQ('${q.id}','notes',this.value)"></label>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg border border-slate-200 p-4 mb-4">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-semibold">項目明細</h2>
+      <button onclick="addItem('${q.id}')" class="text-sm brand hover:underline">＋ 新增項目</button>
+    </div>
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="text-xs text-slate-500"><tr>
+        <th class="text-left p-1 w-8">#</th><th class="text-left">項目說明</th><th class="w-14">單位</th>
+        <th class="w-20 text-right">數量</th><th class="w-24 text-right">單價(客戶)</th>
+        <th class="w-24 text-right bg-amber-50">成本(內部)</th><th class="w-24 text-right">小計</th>
+        <th class="w-24 text-right bg-amber-50">毛利</th><th class="w-8"></th>
+      </tr></thead>
+      <tbody>
+      ${(q.items||[]).map((it,i)=>{const sub=num(it.qty)*num(it.unitPrice);const mg=sub-num(it.qty)*num(it.cost);return `<tr class="border-t border-slate-100">
+        <td class="p-1 text-slate-400">${i+1}</td>
+        <td><input class="w-full border rounded px-1 py-0.5" value="${esc(it.desc)}" onchange="setItem('${q.id}',${i},'desc',this.value)"></td>
+        <td><input class="w-full border rounded px-1 py-0.5 text-center" value="${esc(it.unit)}" onchange="setItem('${q.id}',${i},'unit',this.value)"></td>
+        <td><input class="w-full border rounded px-1 py-0.5 text-right" value="${esc(it.qty)}" onchange="setItem('${q.id}',${i},'qty',this.value)"></td>
+        <td><input class="w-full border rounded px-1 py-0.5 text-right" value="${esc(it.unitPrice)}" onchange="setItem('${q.id}',${i},'unitPrice',this.value)"></td>
+        <td class="bg-amber-50"><input class="w-full border rounded px-1 py-0.5 text-right" value="${esc(it.cost)}" onchange="setItem('${q.id}',${i},'cost',this.value)"></td>
+        <td class="text-right pr-1">${Math.round(sub).toLocaleString()}</td>
+        <td class="text-right pr-1 bg-amber-50 ${mg<0?'text-red-600':'text-emerald-700'}">${Math.round(mg).toLocaleString()}</td>
+        <td class="text-center"><button class="text-red-400 hover:text-red-600" onclick="delItem('${q.id}',${i})">✕</button></td>
+      </tr>`;}).join("")}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-white rounded-lg border border-slate-200 p-4 text-sm">
+      <div class="flex justify-between py-1"><span class="text-slate-500">小計</span><span>${fmt(t.sub)}</span></div>
+      <div class="flex justify-between py-1"><span class="text-slate-500">營業稅 5%</span><span>${fmt(t.tax)}</span></div>
+      <div class="flex justify-between py-1 border-t mt-1 pt-2 font-bold text-base"><span>總計</span><span class="brand">${fmt(t.total)}</span></div>
+    </div>
+    <div class="bg-amber-50 rounded-lg border border-amber-200 p-4 text-sm">
+      <div class="text-xs text-amber-700 mb-1">🔒 內部成本分析（不會出現在客戶 PDF）</div>
+      <div class="flex justify-between py-1"><span class="text-slate-500">成本合計</span><span>${fmt(t.cost)}</span></div>
+      <div class="flex justify-between py-1"><span class="text-slate-500">毛利</span><span class="${t.margin<0?'text-red-600':'text-emerald-700'} font-semibold">${fmt(t.margin)}</span></div>
+      <div class="flex justify-between py-1"><span class="text-slate-500">毛利率</span><span>${(t.marginRate*100).toFixed(1)}%</span></div>
+    </div>
+  </div>`;
+}
+function setQ(id,k,v){ const q=D.quotes.find(x=>x.id===id); if(!q)return; q[k]=v; save(); if(k==='status'){} }
+function setCustomer(id,name){ const q=D.quotes.find(x=>x.id===id); if(!q)return; q.customerName=name; let c=D.customers.find(x=>x.name===name); if(!c&&name){c={id:uid(),name};D.customers.push(c);} q.customerId=c?c.id:""; save(); }
+function addItem(id){ const q=D.quotes.find(x=>x.id===id); q.items=q.items||[]; q.items.push({desc:"",unit:"",qty:1,unitPrice:0,cost:0}); save(); render(); }
+function setItem(id,i,k,v){ const q=D.quotes.find(x=>x.id===id); q.items[i][k]=v; save(); render(); }
+function delItem(id,i){ const q=D.quotes.find(x=>x.id===id); q.items.splice(i,1); save(); render(); }
+
+// ====================== 專案看板 ======================
+function viewBoard(){
+  return `<h1 class="text-2xl font-bold mb-1">專案看板</h1>
+  <p class="text-sm text-slate-500 mb-4">每筆報價依狀態分欄。用下拉改狀態即可推進進度。</p>
+  <div class="flex gap-3 overflow-x-auto pb-4">
+    ${STATUS.map(s=>{const items=D.quotes.filter(q=>(q.status||"報價中")===s);return `
+      <div class="w-64 shrink-0 bg-slate-50 rounded-lg border border-slate-200">
+        <div class="px-3 py-2 font-semibold text-sm border-b border-slate-200 flex justify-between"><span>${s}</span><span class="text-slate-400">${items.length}</span></div>
+        <div class="p-2 space-y-2 min-h-[60px]">
+          ${items.map(q=>{const t=quoteTotals(q);return `<div class="bg-white rounded border border-slate-200 p-2 text-sm">
+            <div class="font-medium truncate">${esc(q.title)||'(未命名)'}</div>
+            <div class="text-xs text-slate-500 mt-0.5">${esc(q.customerName)||'—'} · ${fmt(t.total)}</div>
+            <div class="flex gap-1 mt-2">
+              <select class="text-xs border rounded px-1 py-0.5 flex-1" onchange="setQ('${q.id}','status',this.value);render()">${STATUS.map(x=>`<option ${q.status===x?'selected':''}>${x}</option>`).join("")}</select>
+              <button class="text-xs brand" onclick="editQuote('${q.id}')">開</button>
+            </div>
+          </div>`;}).join("")||'<div class="text-xs text-slate-300 text-center py-2">—</div>'}
+        </div>
+      </div>`;}).join("")}
+  </div>`;
+}
+
+// ====================== 客戶 ======================
+function viewCustomers(){
+  return `<div class="flex items-center justify-between mb-4"><h1 class="text-2xl font-bold">客戶</h1>
+    <button onclick="addCustomer()" class="px-3 py-2 bg-brand text-white rounded-md text-sm">＋ 新增客戶</button></div>
+  <div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
+    ${D.customers.length? `<table class="w-full text-sm"><thead class="text-xs text-slate-500 bg-slate-50"><tr><th class="text-left p-2">名稱</th><th class="text-left">統編</th><th class="text-left">聯絡人</th><th class="text-left">電話</th><th></th></tr></thead><tbody>
+    ${D.customers.map(c=>`<tr class="border-t border-slate-100"><td class="p-2"><input class="border rounded px-1 py-0.5 w-full" value="${esc(c.name)}" onchange="setCust('${c.id}','name',this.value)"></td>
+      <td><input class="border rounded px-1 py-0.5 w-full" value="${esc(c.taxId)}" onchange="setCust('${c.id}','taxId',this.value)"></td>
+      <td><input class="border rounded px-1 py-0.5 w-full" value="${esc(c.contact)}" onchange="setCust('${c.id}','contact',this.value)"></td>
+      <td><input class="border rounded px-1 py-0.5 w-full" value="${esc(c.phone)}" onchange="setCust('${c.id}','phone',this.value)"></td>
+      <td class="text-center"><button class="text-red-400" onclick="delCust('${c.id}')">✕</button></td></tr>`).join("")}
+    </tbody></table>`:'<div class="p-10 text-center text-slate-400 text-sm">尚無客戶。匯入報價時會自動建立。</div>'}
+  </div>`;
+}
+function addCustomer(){ D.customers.push({id:uid(),name:"新客戶",taxId:"",contact:"",phone:""}); save(); render(); }
+function setCust(id,k,v){ const c=D.customers.find(x=>x.id===id); c[k]=v; save(); }
+function delCust(id){ if(!confirm("刪除客戶？"))return; D.customers=D.customers.filter(x=>x.id!==id); save(); render(); }
+
+// ====================== 設定 / 備份 ======================
+function viewSettings(){
+  const c=D.company;
+  return `<h1 class="text-2xl font-bold mb-4">設定 / 備份</h1>
+  <div class="bg-white rounded-lg border border-slate-200 p-4 mb-4 max-w-2xl">
+    <h2 class="font-semibold mb-2">公司抬頭（會印在報價單）</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+      <label>公司名稱<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(c.name)}" onchange="setCo('name',this.value)"></label>
+      <label>統一編號<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(c.taxId)}" onchange="setCo('taxId',this.value)"></label>
+      <label>負責人<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(c.owner)}" onchange="setCo('owner',this.value)"></label>
+      <label>電話<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(c.phone)}" onchange="setCo('phone',this.value)"></label>
+      <label class="md:col-span-2">地址<input class="w-full border rounded px-2 py-1 mt-1" value="${esc(c.address)}" onchange="setCo('address',this.value)"></label>
+      <label class="md:col-span-2">Logo（選填，上傳圖片）<input type="file" accept="image/*" class="mt-1 text-xs" onchange="setLogo(event)">
+        ${c.logo?`<img src="${c.logo}" class="h-12 mt-2 border rounded">`:''}</label>
+    </div>
+  </div>
+  <div class="bg-white rounded-lg border border-slate-200 p-4 max-w-2xl">
+    <h2 class="font-semibold mb-2">資料備份（重要！）</h2>
+    <p class="text-sm text-slate-500 mb-3">資料只存在這台裝置的瀏覽器。<b>清除瀏覽器資料會消失</b>，請定期匯出備份；換手機/電腦時用備份檔還原。</p>
+    <div class="flex flex-wrap gap-2">
+      <button onclick="exportData()" class="px-3 py-2 bg-brand text-white rounded-md text-sm">⬇️ 匯出備份檔</button>
+      <label class="px-3 py-2 bg-white border border-slate-300 rounded-md text-sm cursor-pointer hover:border-brand">⬆️ 還原備份檔<input type="file" accept=".json" class="hidden" onchange="importData(event)"></label>
+      <button onclick="if(confirm('確定清空所有資料？建議先匯出備份！')){localStorage.removeItem(LS_KEY);D=load();render();}" class="px-3 py-2 text-red-600 border border-red-200 rounded-md text-sm">🗑️ 清空全部</button>
+    </div>
+    <div class="text-xs text-slate-400 mt-3">目前：${D.quotes.length} 筆報價、${D.customers.length} 個客戶</div>
+  </div>`;
+}
+function setCo(k,v){ D.company[k]=v; save(); }
+function setLogo(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{D.company.logo=r.result;save();render();}; r.readAsDataURL(f); }
+function exportData(){ const blob=new Blob([JSON.stringify(D,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`佑發備份_${today()}.json`; a.click(); }
+function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{try{const d=JSON.parse(r.result); if(confirm("還原備份會覆蓋目前資料，確定？")){D=Object.assign(structuredClone(DEFAULT_DATA),d);save();render();alert("還原完成");}}catch(err){alert("檔案格式錯誤");}}; r.readAsText(f); }
+
+// ====================== Excel 匯入（容錯）======================
+const HEADER_SYN={ desc:["品名","項目說明","工程項目","說明","材料名稱","名稱","項目及說明","項目","施工項目","規格"], unit:["單位"], qty:["數量","數 量"], price:["單價","單 價","單  價","單   價"], };
+function normalize(s){ return String(s||"").replace(/[\s　]/g,""); }
+function importExcel(e){
+  const files=[...e.target.files]; if(!files.length)return; let ok=0,fail=0; let pending=files.length;
+  files.forEach(f=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const wb=XLSX.read(r.data,{type:"array"});
+        wb.SheetNames.forEach(sn=>{
+          const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:""});
+          const parsed=parseSheet(rows);
+          if(parsed.items.length){
+            const base=(f.name.replace(/\.(xlsx|xlsm|xls)$/i,""))+(wb.SheetNames.length>1?("_"+sn):"");
+            const q={id:uid(),quoteNo:uniqueNo(base),customerId:"",customerName:"待分類",projectType:"",title:base,issuedAt:today(),status:"報價中",notes:"",items:parsed.items,createdAt:Date.now()};
+            D.quotes.push(q); ok++;
+          }
+        });
+      }catch(err){ fail++; console.error(err); }
+      if(--pending===0){ save(); render(); alert(`匯入完成：${ok} 份成功${fail?`，${fail} 個檔失敗`:''}`); }
+    };
+    r.readAsArrayBuffer(f);
+  });
+  e.target.value="";
+}
+function uniqueNo(base){ let n=base.slice(0,40),i=1; while(D.quotes.some(q=>q.quoteNo===n)){i++;n=base.slice(0,38)+"-"+i;} return n; }
+function parseSheet(rows){
+  // 找表頭列
+  let hRow=-1,map={};
+  for(let i=0;i<Math.min(rows.length,30);i++){
+    const m=matchHeader(rows[i]); if(Object.keys(m).length>=3){hRow=i;map=m;break;}
+  }
+  if(hRow<0) return {items:[]};
+  const items=[]; let seq=0;
+  for(let i=hRow+1;i<rows.length;i++){
+    const row=rows[i]; const desc=String(row[map.desc]??"").trim();
+    if(!desc) continue;
+    if(desc.includes("以下空白")) break;
+    if(/小計|合計|總計|稅額|稅金|備註|工程總|間接工程|直接工程費|管利費|營業稅|新台幣|廠商/.test(desc)) continue;
+    const qty=num(row[map.qty]), price=num(row[map.price]);
+    if(!qty||!price) continue;
+    const unit=map.unit!=null?String(row[map.unit]??"").trim():"";
+    seq++; items.push({desc,unit,qty,unitPrice:price,cost:Math.round(price*0.7)});
+  }
+  return {items};
+}
+function matchHeader(row){
+  const m={},used=new Set();
+  (row||[]).forEach((cell,ci)=>{
+    const t=normalize(cell); if(!t)return;
+    for(const key in HEADER_SYN){ if(m[key]!=null)continue;
+      if(HEADER_SYN[key].some(syn=>{const s=normalize(syn);return t===s||t.includes(s)||s.includes(t)&&t.length>=1&&Math.abs(s.length-t.length)<=1;})){ if(!used.has(ci)){m[key]=ci;used.add(ci);break;} }
+    }
+  });
+  return m;
+}
+
+// ====================== 列印（客戶版 PDF，無成本）======================
+function printQuote(id){
+  const q=D.quotes.find(x=>x.id===id); if(!q)return; const t=quoteTotals(q); const c=D.company;
+  document.getElementById("printArea").innerHTML=`
+    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;align-items:flex-start;">
+      <div>${c.logo?`<img src="${c.logo}" style="height:56px">`:`<div style="width:120px;height:56px;border:1px dashed #bbb;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:12px">LOGO</div>`}</div>
+      <div style="text-align:right;line-height:1.5">
+        <div style="font-size:18px;font-weight:bold">${esc(c.name)}</div>
+        <div style="font-size:12px">統一編號：${esc(c.taxId)}　負責人：${esc(c.owner)}</div>
+        <div style="font-size:12px">${esc(c.address)}</div>
+        <div style="font-size:12px">電話：${esc(c.phone)}</div>
+      </div>
+    </div>
+    <h2 style="text-align:center;letter-spacing:8px;margin:16px 0">工 程 報 價 單</h2>
+    <table style="width:100%;font-size:13px;margin-bottom:8px"><tr>
+      <td>客戶：${esc(q.customerName)}</td><td style="text-align:right">報價單號：${esc(q.quoteNo)}</td></tr>
+      <tr><td>工程名稱：${esc(q.title)}</td><td style="text-align:right">報價日期：${esc(q.issuedAt)}</td></tr></table>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#f0f0f0">
+        ${["項次","項目說明","單位","數量","單價","小計"].map(h=>`<th style="border:1px solid #999;padding:6px">${h}</th>`).join("")}
+      </tr></thead><tbody>
+      ${(q.items||[]).map((it,i)=>{const sub=num(it.qty)*num(it.unitPrice);return `<tr>
+        <td style="border:1px solid #999;padding:5px;text-align:center">${i+1}</td>
+        <td style="border:1px solid #999;padding:5px">${esc(it.desc)}</td>
+        <td style="border:1px solid #999;padding:5px;text-align:center">${esc(it.unit)}</td>
+        <td style="border:1px solid #999;padding:5px;text-align:right">${num(it.qty).toLocaleString()}</td>
+        <td style="border:1px solid #999;padding:5px;text-align:right">${Math.round(num(it.unitPrice)).toLocaleString()}</td>
+        <td style="border:1px solid #999;padding:5px;text-align:right">${Math.round(sub).toLocaleString()}</td></tr>`;}).join("")}
+      </tbody></table>
+    <div style="text-align:right;margin-top:12px;font-size:14px">
+      <div>小計：${fmt(t.sub)}　稅額：${fmt(t.tax)}</div>
+      <div style="font-size:17px;font-weight:bold;margin-top:4px">總計：${fmt(t.total)}</div></div>
+    ${q.notes?`<p style="margin-top:20px;font-size:12px">備註：${esc(q.notes)}</p>`:""}
+    <p style="margin-top:40px;font-size:12px;color:#666">本報價單有效期限 30 天。　承辦：${esc(c.owner)}</p>`;
+  window.print();
+}
+
+// ====================== utils ======================
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
+function today(){ const d=new Date(); return d.toISOString().slice(0,10); }
+
+render();
+</script>
+</body>
+</html>
