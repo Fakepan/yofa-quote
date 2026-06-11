@@ -70,7 +70,23 @@ function quoteTotals(q){
 // ====================== 路由 / 渲染 ======================
 let view = "quotes";       // quotes | board | customers | settings | edit
 let editingId = null;
-let quoteFilter = { q:"", status:"" };
+let quoteFilter = { q:"", status:"", type:"" };
+
+// 依工程名稱自動猜分類，匯入時自動標上，方便分類搜尋
+function guessType(s){
+  s=String(s||"");
+  const rules=[
+    [/保養|維修|清洗/,"保養維修"],
+    [/汰換|更新|增設|新增/,"設備汰換"],
+    [/全熱|交換器|風機|換氣|空氣品質|通風|排氣|進氣/,"空調通風"],
+    [/UPS|機房|不斷電/,"機房工程"],
+    [/隔音|吸音/,"隔音工程"],
+    [/冷氣|冷媒|分離式|壁掛|VRV|冰水|空調/,"冷氣空調"],
+    [/水泵|泵浦|抽水/,"水泵工程"],
+  ];
+  for(const [re,t] of rules){ if(re.test(s)) return t; }
+  return "其他";
+}
 
 function go(v){ view=v; render(); window.scrollTo(0,0); }
 
@@ -114,6 +130,7 @@ function renderView(){
 function viewQuotes(){
   let list = D.quotes.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
   if(quoteFilter.q){ const k=quoteFilter.q.toLowerCase(); list=list.filter(q=> (q.quoteNo||"").toLowerCase().includes(k) || (q.title||"").toLowerCase().includes(k) || (q.customerName||"").toLowerCase().includes(k)); }
+  if(quoteFilter.type) list=list.filter(q=>q.projectType===quoteFilter.type);
   if(quoteFilter.status) list=list.filter(q=>q.status===quoteFilter.status);
   return `
   <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
@@ -126,17 +143,25 @@ function viewQuotes(){
       <button onclick="newQuote()" class="px-3 py-2 bg-brand text-white rounded-md text-sm">＋ 新增報價</button>
     </div>
   </div>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-    <input class="border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="搜尋 單號 / 工程 / 客戶…" value="${esc(quoteFilter.q)}" oninput="quoteFilter.q=this.value;rerenderList()">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+    <input class="border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="🔍 搜尋 單號 / 工程 / 客戶…" value="${esc(quoteFilter.q)}" oninput="quoteFilter.q=this.value;rerenderList()">
+    <select class="border border-slate-300 rounded-md px-3 py-2 text-sm" onchange="quoteFilter.type=this.value;rerenderList()">
+      <option value="">全部類型</option>${[...new Set(D.quotes.map(q=>q.projectType).filter(Boolean))].sort().map(t=>`<option ${quoteFilter.type===t?'selected':''}>${esc(t)}</option>`).join("")}
+    </select>
     <select class="border border-slate-300 rounded-md px-3 py-2 text-sm" onchange="quoteFilter.status=this.value;rerenderList()">
       <option value="">全部狀態</option>${STATUS.map(s=>`<option ${quoteFilter.status===s?'selected':''}>${s}</option>`).join("")}
     </select>
+  </div>
+  <div class="flex flex-wrap gap-1 mb-3">
+    <button onclick="quoteFilter.type='';rerenderList();render()" class="text-xs px-2 py-1 rounded-full border ${!quoteFilter.type?'bg-brand text-white border-brand':'border-slate-300 text-slate-600'}">全部</button>
+    ${[...new Set(D.quotes.map(q=>q.projectType).filter(Boolean))].sort().map(t=>`<button onclick="quoteFilter.type='${esc(t)}';rerenderList();render()" class="text-xs px-2 py-1 rounded-full border ${quoteFilter.type===t?'bg-brand text-white border-brand':'border-slate-300 text-slate-600'}">${esc(t)}</button>`).join("")}
   </div>
   <div id="quoteList" class="bg-white rounded-lg border border-slate-200 overflow-hidden">${quoteRows(list)}</div>`;
 }
 function rerenderList(){
   let list = D.quotes.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
   if(quoteFilter.q){ const k=quoteFilter.q.toLowerCase(); list=list.filter(q=> (q.quoteNo||"").toLowerCase().includes(k) || (q.title||"").toLowerCase().includes(k) || (q.customerName||"").toLowerCase().includes(k)); }
+  if(quoteFilter.type) list=list.filter(q=>q.projectType===quoteFilter.type);
   if(quoteFilter.status) list=list.filter(q=>q.status===quoteFilter.status);
   const el=document.getElementById("quoteList"); if(el) el.innerHTML=quoteRows(list);
 }
@@ -149,7 +174,7 @@ function quoteRows(list){
     </tr></thead><tbody>
     ${list.map(q=>{const t=quoteTotals(q);return `<tr class="border-t border-slate-100 hover:bg-slate-50">
       <td class="p-2 font-mono text-xs"><button class="brand hover:underline" onclick="editQuote('${q.id}')">${esc(q.quoteNo)||'(未命名)'}</button></td>
-      <td class="max-w-[14rem] truncate">${esc(q.title)}</td>
+      <td class="max-w-[16rem]"><div class="truncate">${esc(q.title)}</div>${q.projectType?`<span class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">${esc(q.projectType)}</span>`:''}</td>
       <td class="text-xs text-slate-600">${esc(q.customerName)||'—'}</td>
       <td class="text-center text-xs">${(q.items||[]).length}</td>
       <td class="text-right">${fmt(t.total)}</td>
@@ -336,7 +361,7 @@ function importExcel(e){
           const parsed=parseSheet(rows);
           if(parsed.items.length){
             const base=(f.name.replace(/\.(xlsx|xlsm|xls)$/i,""))+(wb.SheetNames.length>1?("_"+sn):"");
-            const q={id:uid(),quoteNo:uniqueNo(base),customerId:"",customerName:"待分類",projectType:"",title:base,issuedAt:today(),status:"報價中",notes:"",items:parsed.items,createdAt:Date.now()};
+            const q={id:uid(),quoteNo:uniqueNo(base),customerId:"",customerName:"待分類",projectType:guessType(base),title:base,issuedAt:today(),status:"報價中",notes:"",items:parsed.items,createdAt:Date.now()};
             D.quotes.push(q); ok++;
           }
         });
