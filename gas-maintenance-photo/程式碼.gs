@@ -69,9 +69,8 @@ function uploadPhoto(p) {
     );
     console.log('[uploadPhoto] 開始：' + key);
 
-    // 1. 備份原檔到 Drive（設為公開可讀，CellImage 才讀得到）
-    const fileId = backupAndGetId_(p, blob);
-    console.log('[uploadPhoto] Drive 備份完成 fileId=' + fileId);
+    // 1.（v4.2 調整順序）Drive 備份移到「定位完成之後」執行：
+    //    多槽位項目需要用槽位編號命名備份檔，避免互相覆蓋
 
     // 2. 開啟母版試算表
     let ss;
@@ -94,8 +93,12 @@ function uploadPhoto(p) {
     console.log('[uploadPhoto] 目標分頁：' + targetTab);
 
     // 3. Z 欄 TextFinder 動態定位
-    //    ★v4.1 改用 findAll：除了「找不到」，也攔截「定位鍵重複」的幽靈狀況
-    //    （重複鍵會讓照片永遠寫進第一個槽位且不報錯，直接擋下最安全）
+    //    ★v4.2★ findAll 取得該定位鍵的所有槽位：
+    //    - 找不到 → 報錯
+    //    - 一個槽位（絕大多數項目）→ 直接使用，重傳會覆蓋（原行為不變）
+    //    - 多個槽位（泰控機房的空氣濾清器等「同名多格」項目）→ 依序填入
+    //      第一個空格，全滿才報錯。母版文字完全不用改，同一選單項目
+    //      連續上傳會自動一格一格往下放。
     const matches = sh.getRange('Z:Z')
       .createTextFinder(key)
       .matchEntireCell(true)
@@ -104,30 +107,33 @@ function uploadPhoto(p) {
       console.warn('[uploadPhoto] Z 欄找不到定位鍵：' + key);
       return { ok: false, error: 'Z 欄找不到定位鍵：' + key };
     }
-    if (matches.length > 1) {
-      const rows = matches.map(function (r) { return r.getRow(); }).join(', ');
-      console.warn('[uploadPhoto] Z 欄定位鍵重複：' + key + '（列 ' + rows + '）');
-      return { ok: false, error: 'Z 欄定位鍵重複（出現在第 ' + rows + ' 列），請修正母版後再上傳：' + key };
-    }
-    const found = matches[0];
 
-    // 4. 錨點校正：Z 欄字串寫在區塊起始列，照片格從下一列開始
-    let targetRow = found.getRow() + 1;
+    // 4. 逐一解析槽位的照片格起始列
+    //    （Z 鍵的下一列 + 合併儲存格校正安全網，勿移除；詳見 v4 註解）
     const targetCol = 1;   // A 欄
-
-    // 4-1. 安全網：若落點在合併儲存格內，改抓合併範圍的起始列
-    //      （這一步同時吸收了「Z 欄鍵寫在照片格首列」與「寫在標題列」兩種情況，
-    //        只要照片格 A~D 有合併，最後都會校正回正確的起始列，勿移除）
-    try {
-      const probe = sh.getRange(targetRow, targetCol);
-      const merged = probe.getMergedRanges();
-      if (merged.length > 0) {
-        targetRow = merged[0].getRow();
+    let targetRow = -1, slotNo = 0;
+    for (let m = 0; m < matches.length; m++) {
+      let row = matches[m].getRow() + 1;
+      try {
+        const merged = sh.getRange(row, targetCol).getMergedRanges();
+        if (merged.length > 0) row = merged[0].getRow();
+      } catch (e) {
+        console.warn('[uploadPhoto] 合併儲存格校正略過：' + e.message);
       }
-    } catch (e) {
-      console.warn('[uploadPhoto] 合併儲存格校正略過：' + e.message);
-      // 若無任何狀況則維持原 targetRow
+      if (matches.length === 1) { targetRow = row; slotNo = 1; break; }
+      // 多槽位：isBlank 判斷該格是否已有照片（CellImage 或 IMAGE 公式都算非空）
+      if (sh.getRange(row, targetCol).isBlank()) { targetRow = row; slotNo = m + 1; break; }
     }
+    if (targetRow < 0) {
+      console.warn('[uploadPhoto] 槽位全滿：' + key + '（共 ' + matches.length + ' 格）');
+      return { ok: false, error: '「' + key + '」的 ' + matches.length + ' 個槽位都已有照片；要更換請先到試算表清空要重拍的那一格再上傳' };
+    }
+
+    // 4-2. 備份原檔到 Drive（設為公開可讀，CellImage 才讀得到）
+    //      多槽位時檔名加「_槽位N」：避免互相覆蓋、造成先前槽位圖片斷鏈
+    const suffix = (matches.length > 1) ? '_槽位' + slotNo : '';
+    const fileId = backupAndGetId_(p, blob, suffix);
+    console.log('[uploadPhoto] Drive 備份完成 fileId=' + fileId);
 
     // 5. 強制統一欄寬列高
     //    ★批次版 setColumnWidths / setRowHeights：一次呼叫取代迴圈 14 次呼叫★
@@ -172,7 +178,9 @@ function uploadPhoto(p) {
     return {
       ok: true,
       name: key + '.jpg',
-      where: targetTab + '!A' + targetRow + ' | 容器404x330 | ' + method + ' | 已入格'
+      where: targetTab + '!A' + targetRow +
+             (matches.length > 1 ? ' | 槽位' + slotNo + '/' + matches.length : '') +
+             ' | 容器404x330 | ' + method + ' | 已入格'
     };
 
   } catch (err) {
@@ -222,12 +230,12 @@ function getOrCreateMonthSheet_(ss, targetTab) {
   }
 }
 
-/** 備份到 Drive、設公開可讀、回傳檔案 ID */
-function backupAndGetId_(p, blob) {
+/** 備份到 Drive、設公開可讀、回傳檔案 ID（suffix：多槽位時的「_槽位N」） */
+function backupAndGetId_(p, blob, suffix) {
   const root = DriveApp.getFolderById(BACKUP_FOLDER_ID);
   const ym   = getOrCreate_(root, p.ym);
   const room = getOrCreate_(ym, p.room);
-  const name = p.room + '__' + p.item + '.jpg';
+  const name = p.room + '__' + p.item + (suffix || '') + '.jpg';
 
   // 覆蓋舊檔（同槽位重拍時，舊照移到垃圾桶）
   const dup = room.getFilesByName(name);
