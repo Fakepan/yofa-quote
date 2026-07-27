@@ -94,14 +94,22 @@ function uploadPhoto(p) {
     console.log('[uploadPhoto] 目標分頁：' + targetTab);
 
     // 3. Z 欄 TextFinder 動態定位
-    const found = sh.getRange('Z:Z')
+    //    ★v4.1 改用 findAll：除了「找不到」，也攔截「定位鍵重複」的幽靈狀況
+    //    （重複鍵會讓照片永遠寫進第一個槽位且不報錯，直接擋下最安全）
+    const matches = sh.getRange('Z:Z')
       .createTextFinder(key)
       .matchEntireCell(true)
-      .findNext();
-    if (!found) {
+      .findAll();
+    if (matches.length === 0) {
       console.warn('[uploadPhoto] Z 欄找不到定位鍵：' + key);
       return { ok: false, error: 'Z 欄找不到定位鍵：' + key };
     }
+    if (matches.length > 1) {
+      const rows = matches.map(function (r) { return r.getRow(); }).join(', ');
+      console.warn('[uploadPhoto] Z 欄定位鍵重複：' + key + '（列 ' + rows + '）');
+      return { ok: false, error: 'Z 欄定位鍵重複（出現在第 ' + rows + ' 列），請修正母版後再上傳：' + key };
+    }
+    const found = matches[0];
 
     // 4. 錨點校正：Z 欄字串寫在區塊起始列，照片格從下一列開始
     let targetRow = found.getRow() + 1;
