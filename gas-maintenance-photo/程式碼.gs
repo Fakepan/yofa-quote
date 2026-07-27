@@ -330,6 +330,59 @@ function buildZColumn() {
   }
 }
 
+/**
+ * ★一鍵重建 Z 欄定位鍵（解決「定位鍵重複」）★
+ * 背景：模板列位置調整過後再跑 buildZColumn，舊鍵會殘留在位移前的
+ * 格子（buildZColumn 設計上保留 Z 欄既有內容），新舊鍵並存 → 重複。
+ * 本函式「先清空整條 Z 欄、再重建」，保證每個槽位只有一個鍵。
+ * 執行方式：在 GAS 編輯器上方函式選單選 rebuildZColumnEverywhere → 執行。
+ * 會自動處理「模板」與所有六位數年月分頁（202607、202608…），其他分頁不碰。
+ */
+function rebuildZColumnEverywhere() {
+  const ss = SpreadsheetApp.openById(MASTER_SHEET_ID);
+  const results = [];
+  ss.getSheets().forEach(function (sh) {
+    const name = sh.getName();
+    if (name !== TEMPLATE_TAB_NAME && !/^\d{6}$/.test(name)) return; // 只碰模板與年月分頁
+    results.push(name + '：' + rebuildZColumnFor_(sh));
+  });
+  const msg = results.join('\n');
+  console.log('[rebuildZColumnEverywhere]\n' + msg);
+  return msg;
+}
+
+/** 對單一分頁清空並重建 Z 欄（掃描邏輯與 buildZColumn 完全相同） */
+function rebuildZColumnFor_(sh) {
+  const lastRow = sh.getLastRow();
+  const fVals = sh.getRange(1, 6, lastRow, 1).getValues();   // F 欄一次讀入
+  // ★與 buildZColumn 唯一的差異：從「全空」陣列開始 → 殘留舊鍵一律清除
+  const zVals = [];
+  for (let r = 0; r < lastRow; r++) zVals.push(['']);
+
+  let written = 0, currentRoom = '', photoStartRow = -1;
+  for (let i = 0; i < fVals.length; i++) {
+    const fVal = String(fVals[i][0] || '').trim();
+    if (fVal.startsWith('保養檢查項目')) photoStartRow = i + 2;   // 下一列 = 照片格起始列
+    if (fVal.startsWith('機房名稱:')) currentRoom = fVal.replace('機房名稱:', '').trim();
+    if (fVal.startsWith('照片內容說明:') && currentRoom && photoStartRow > 0) {
+      let desc = fVal.replace('照片內容說明:', '').trim();
+      // 說明文字折到下一列時接上（排除撞到其他標題列）
+      const nextVal = String(fVals[i + 1] ? fVals[i + 1][0] : '').trim();
+      if (nextVal && !nextVal.startsWith('施工') && !nextVal.startsWith('完工') &&
+          !nextVal.startsWith('機房') && !nextVal.startsWith('保養') && !nextVal.startsWith('照片')) {
+        desc += nextVal;
+      }
+      if (photoStartRow <= lastRow) {
+        zVals[photoStartRow - 1][0] = currentRoom + '__' + desc;
+        written++;
+      }
+    }
+  }
+  sh.getRange(1, Z_COL, lastRow, 1).setValues(zVals);   // 一次寫回
+  SpreadsheetApp.flush();
+  return '重建完成，共寫入 ' + written + ' 個定位鍵';
+}
+
 /** 診斷用：在 Apps Script 執行這個，看看試算表能不能開 */
 function diagTest() {
   try {
