@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>
+  :root{
+    --navy:#1F3864; --line:#d8dde6;
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1a2233; --sub:#6b7686;
+    --ok:#1a7f4b; --warn:#b5480f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:var(--bg);color:var(--ink);font-size:17px;line-height:1.5}
+  header{background:var(--navy);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:5}
+  header b{font-size:19px}
+  header span{display:block;font-size:12px;opacity:.7;margin-top:2px}
+  .wrap{padding:16px 16px 40px;max-width:520px;margin:0 auto}
+  label{display:block;font-size:13px;color:var(--sub);margin:16px 2px 6px;font-weight:600}
+  select{width:100%;padding:15px 14px;font-size:18px;border:1.5px solid var(--line);
+    border-radius:12px;background:var(--card);color:var(--ink);appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%236b7686' stroke-width='2'><path d='M5 8l5 5 5-5'/></svg>");
+    background-repeat:no-repeat;background-position:right 14px center}
+  select:disabled{opacity:.45}
+  .slot{background:#eef1f6;border-radius:10px;padding:12px 14px;margin-top:20px;font-size:14px;color:var(--navy)}
+  .slot b{font-size:16px}
+  .shoot{margin-top:24px;display:flex;flex-direction:column;gap:10px}
+  .cambtn,.selbtn{width:100%;padding:18px;font-size:18px;font-weight:700;border:none;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
+  .cambtn{background:var(--navy);color:#fff}
+  .selbtn{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+  .cambtn:disabled,.selbtn:disabled{background:#aeb6c2;border-color:#aeb6c2;color:#fff}
+  #preview{margin-top:18px;display:none}
+  #preview img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
+  .upbtn{width:100%;margin-top:14px;padding:18px;font-size:19px;font-weight:700;border:none;
+    border-radius:14px;background:var(--ok);color:#fff}
+  .upbtn:disabled{background:#aeb6c2}
+  .retake{width:100%;margin-top:10px;padding:14px;font-size:16px;border:1.5px solid var(--line);
+    border-radius:12px;background:var(--card);color:var(--sub)}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:13px 22px;border-radius:30px;font-size:15px;
+    opacity:0;transition:.25s;pointer-events:none;max-width:88%;text-align:center}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.ok{background:var(--ok)} #toast.err{background:var(--warn)}
+  .count{font-size:13px;color:var(--sub);margin-top:8px;text-align:center}
+  canvas{display:none}
+  .note{font-size:12px;color:var(--sub);text-align:center;margin-top:6px}
+  .cropinfo{font-size:12px;text-align:center;margin-top:8px;padding:6px 10px;
+    border-radius:8px;background:#e6f4ec;color:var(--ok);font-weight:600}
+  .cropinfo.bad{background:#fdeee6;color:var(--warn)}
+</style>
+</head>
+<body>
+<header>
+  <b>佑發 · 保養拍照</b>
+  <span>高速公路局 · 選好位置直接拍，自動歸檔　<b style="opacity:.55">v5 強化版</b></span>
+</header>
+
+<div class="wrap">
+  <label>機房</label>
+  <select id="room"><option value="">選單載入中…</option></select>
+
+  <label>設備編號</label>
+  <select id="equip" disabled><option value="">先選機房</option></select>
+
+  <label>檢查項目</label>
+  <select id="item" disabled><option value="">先選設備</option></select>
+
+  <div class="slot" id="slotBox" style="display:none">
+    即將拍攝：<b id="slotText"></b>
+  </div>
+
+  <div class="shoot">
+    <!-- 直接開相機 -->
+    <button class="cambtn" id="camBtn" disabled>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>
+      </svg>
+      直接拍照
+    </button>
+    <!-- 從相簿選（時間相機 App 拍好的）-->
+    <button class="selbtn" id="selBtn" disabled>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+      </svg>
+      從相簿選擇
+    </button>
+    <div class="note">使用時間相機 App 拍好後，點「從相簿選擇」</div>
+  </div>
+
+  <!-- 相機 input（capture=environment 強制後鏡頭） -->
+  <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
+  <!-- 相簿 input（不加 capture，讓使用者選相簿） -->
+  <input type="file" id="galInput" accept="image/*" style="display:none">
+
+  <div id="preview">
+    <img id="previewImg" alt="預覽">
+    <div class="cropinfo" id="cropInfo"></div>
+    <button class="upbtn" id="upBtn">上傳並歸檔</button>
+    <button class="retake" id="retakeBtn">重新選擇</button>
+  </div>
+  <div class="count" id="count"></div>
+</div>
+
+<canvas id="cv"></canvas>
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+ * 常數設定區（要調整行為只需改這裡）
+ * ============================================================ */
+const BOX_RATIO   = 404 / 330; // ★容器比例，與後端 404x330 一致（改這裡即可同步裁切比例）
+const MAX_SIDE    = 1024;      // 壓縮最長邊（px）
+const JPEG_Q      = 0.75;      // JPEG 品質（0~1）
+const MAX_FILE_MB = 25;        // 原始檔案大小上限（MB），超過視為選錯檔，直接擋下
+const MENU_RETRY  = 3;         // 選單載入失敗時的自動重試次數
+
+let MENU = {}, uploadedCount = 0, currentDataUrl = null;
+const $ = id => document.getElementById(id);
+
+/* ============================================================
+ * 民國年月
+ * ★改為「函式」而非頁面載入時算一次：
+ *   外場常常一頁開整天，跨到隔月（例如 8/31 晚上開著放到 9/1）
+ *   舊寫法會把 9 月的照片歸到 8 月，改成上傳當下即時計算。
+ * ============================================================ */
+function nowYm() {
+  const d = new Date();
+  return (d.getFullYear() - 1911) + '年' + (d.getMonth() + 1) + '月';
+}
+
+/* ============================================================
+ * 載入選單（含失敗自動重試）
+ * 舊版沒有 withFailureHandler：後端一出錯，三個下拉永遠是空的、
+ * 使用者只會看到「先選機房」卡死。這裡補上錯誤提示 + 自動重試。
+ * ============================================================ */
+function loadMenu(attempt) {
+  attempt = attempt || 1;
+  console.log('[getMenu] 開始載入選單，第 ' + attempt + ' 次');
+  google.script.run
+    .withSuccessHandler(m => {
+      try {
+        if (!m || typeof m !== 'object' || Object.keys(m).length === 0) {
+          throw new Error('後端回傳的選單是空的，請檢查 blank_master 選單來源分頁');
+        }
+        MENU = m;
+        const r = $('room');
+        r.innerHTML = '<option value="">請選擇機房…</option>';
+        Object.keys(MENU).forEach(k => r.add(new Option(k, k)));
+        console.log('[getMenu] 載入成功，機房數：' + Object.keys(MENU).length);
+      } catch (err) {
+        console.error('[getMenu] 資料異常：', err);
+        toast('選單資料異常：' + err.message, 'err');
+      }
+    })
+    .withFailureHandler(err => {
+      console.error('[getMenu] 呼叫失敗：', err);
+      if (attempt < MENU_RETRY) {
+        // 指數退避：1 秒、2 秒後重試，避免瞬間網路不穩就整頁報廢
+        setTimeout(() => loadMenu(attempt + 1), attempt * 1000);
+      } else {
+        $('room').innerHTML = '<option value="">選單載入失敗，請重新整理</option>';
+        toast('選單載入失敗：' + (err && err.message ? err.message : '連線異常') + '，請重新整理頁面', 'err');
+      }
+    })
+    .getMenu();
+}
+loadMenu();
+
+/* ============================================================
+ * 三層連動下拉（機房 → 設備 → 項目）
+ * 補上 MENU 結構的防呆：若後端資料缺層（例如某機房底下沒設備）
+ * 舊版會直接 throw 讓整頁 JS 掛掉，這裡改為提示並保持可操作。
+ * ============================================================ */
+$('room').onchange = e => {
+  const eq = $('equip');
+  eq.innerHTML = '<option value="">請選擇設備…</option>';
+  $('item').innerHTML = '<option value="">先選設備</option>';
+  $('item').disabled = true;
+  const roomData = e.target.value ? MENU[e.target.value] : null;
+  if (roomData && typeof roomData === 'object') {
+    Object.keys(roomData).forEach(k => eq.add(new Option(k, k)));
+    eq.disabled = false;
+  } else {
+    if (e.target.value) {
+      console.warn('[menu] 機房「' + e.target.value + '」底下沒有設備資料');
+      toast('此機房沒有設備資料，請檢查選單來源', 'err');
+    }
+    eq.disabled = true;
+  }
+  refreshSlot();
+};
+
+$('equip').onchange = e => {
+  const it = $('item');
+  it.innerHTML = '<option value="">請選擇項目…</option>';
+  const room = $('room').value;
+  const items = (e.target.value && MENU[room]) ? MENU[room][e.target.value] : null;
+  if (Array.isArray(items) && items.length) {
+    items.forEach(x => it.add(new Option(x.label || x.desc, x.desc)));
+    it.disabled = false;
+  } else {
+    if (e.target.value) {
+      console.warn('[menu] 設備「' + e.target.value + '」底下沒有檢查項目');
+      toast('此設備沒有檢查項目，請檢查選單來源', 'err');
+    }
+    it.disabled = true;
+  }
+  refreshSlot();
+};
+$('item').onchange = refreshSlot;
+
+function refreshSlot() {
+  const r = $('room').value, e = $('equip').value, i = $('item').value;
+  const ready = !!(r && e && i);
+  $('camBtn').disabled = !ready;
+  $('selBtn').disabled = !ready;
+  $('slotBox').style.display = ready ? 'block' : 'none';
+  if (ready) $('slotText').textContent = r + ' · ' + i;
+}
+
+/* ============================================================
+ * 按鈕觸發對應 input
+ * ============================================================ */
+$('camBtn').onclick = () => $('camInput').click();
+$('selBtn').onclick = () => $('galInput').click();
+$('retakeBtn').onclick = () => {
+  $('camInput').value = '';
+  $('galInput').value = '';
+  $('preview').style.display = 'none';
+  currentDataUrl = null;
+};
+
+// 兩個 input 都走同一個處理流程
+$('camInput').onchange = ev => handleFile(ev.target.files[0]);
+$('galInput').onchange = ev => handleFile(ev.target.files[0]);
+
+/* ============================================================
+ * 檔案接收 + 防呆
+ * ① 檔案型別檢查：相簿可能誤選到影片/PDF，先擋下
+ * ② 檔案大小檢查：超大檔（全景照等）轉 dataURL 會讓手機記憶體爆掉
+ * ③ 改用 URL.createObjectURL 解碼：
+ *    比 FileReader→dataURL 少一份 base64 副本、速度較快也較省記憶體
+ *    （特殊寫法說明：objectURL 用完必須 revokeObjectURL 釋放，否則會累積佔記憶體）
+ * ============================================================ */
+function handleFile(file) {
+  if (!file) return;
+  try {
+    console.log('[file] 選取：' + file.name + '，' + (file.size / 1048576).toFixed(2) + ' MB，type=' + file.type);
+
+    if (file.type && !file.type.startsWith('image/')) {
+      toast('請選擇「照片」檔案（目前選到的是 ' + file.type + '）', 'err');
+      return;
+    }
+    if (file.size > MAX_FILE_MB * 1048576) {
+      toast('檔案超過 ' + MAX_FILE_MB + 'MB，請改用一般照片模式拍攝', 'err');
+      return;
+    }
+
+    const objUrl = URL.createObjectURL(file);
+    compress(objUrl, () => URL.revokeObjectURL(objUrl));
+  } catch (err) {
+    console.error('[file] 讀取失敗：', err);
+    toast('照片讀取失敗，請重新選擇', 'err');
+  }
+}
+
+/* ============================================================
+ * 裁切成容器比例 404:330 + 壓縮（★邏輯與 v4 完全相同，零白邊的關鍵★)
+ * 新增：img.onerror（照片解碼失敗時舊版會「毫無反應」）、try...catch
+ * done：載入結束後的回呼，用來釋放 objectURL
+ * ============================================================ */
+function compress(src, done) {
+  const img = new Image();
+
+  img.onload = () => {
+    try {
+      const cv = $('cv'), ctx = cv.getContext('2d');
+
+      // ① 依 BOX_RATIO 計算裁切區域（來源座標）
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (!sw || !sh) throw new Error('照片尺寸為 0，可能是損毀檔');
+      const imgRatio = sw / sh;
+
+      if (imgRatio > BOX_RATIO) {
+        // 照片比容器寬 → 裁掉左右兩側（高度完整保留，頂端浮水印不受影響）
+        const newW = Math.round(sh * BOX_RATIO);
+        sx = Math.round((sw - newW) / 2);   // 置中裁切
+        sw = newW;
+      } else if (imgRatio < BOX_RATIO) {
+        // 照片比容器高 → 裁掉底部（從頂端開始保留，確保時間浮水印完整）
+        sh = Math.round(sw / BOX_RATIO);
+        sy = 0;
+      }
+
+      // ② 輸出尺寸：等比縮到最長邊 MAX_SIDE
+      let outW = sw, outH = sh;
+      if (outW > MAX_SIDE) {
+        outH = Math.round(outH * MAX_SIDE / outW);
+        outW = MAX_SIDE;
+      }
+
+      // ③ 裁切 + 縮放一次完成
+      cv.width = outW; cv.height = outH;
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+
+      currentDataUrl = cv.toDataURL('image/jpeg', JPEG_Q);
+      $('previewImg').src = currentDataUrl;
+      $('preview').style.display = 'block';
+      console.log('[compress] 原圖 ' + img.width + 'x' + img.height +
+        ' → 輸出 ' + outW + 'x' + outH +
+        '，約 ' + Math.round(currentDataUrl.length * 3 / 4 / 1024) + ' KB');
+
+      // ★自我驗證：顯示裁切後比例，確認裁切確實生效★
+      const outRatio = outW / outH;
+      const diff = Math.abs(outRatio - BOX_RATIO);
+      const info = $('cropInfo');
+      if (diff < 0.01) {
+        info.className = 'cropinfo';
+        info.textContent = '✓ 已裁切 ' + outW + '×' + outH +
+          '（比例 ' + outRatio.toFixed(3) + '，容器 ' + BOX_RATIO.toFixed(3) + '）零白邊';
+      } else {
+        info.className = 'cropinfo bad';
+        info.textContent = '⚠ 比例不符 ' + outRatio.toFixed(3) +
+          '（應為 ' + BOX_RATIO.toFixed(3) + '）→ 版本未更新，請重新部署';
+      }
+    } catch (err) {
+      console.error('[compress] 處理失敗：', err);
+      toast('照片處理失敗：' + err.message, 'err');
+    } finally {
+      if (done) done();  // 釋放 objectURL
+    }
+  };
+
+  img.onerror = () => {
+    console.error('[compress] 照片解碼失敗（格式不支援或檔案損毀）');
+    toast('照片無法讀取，可能是格式不支援（如 HEIC），請改用 JPEG 或重拍', 'err');
+    if (done) done();
+  };
+
+  img.src = src;
+}
+
+/* ============================================================
+ * 上傳
+ * 新增：
+ * ① res 結構防呆（後端若回傳非預期格式不會讓前端炸掉）
+ * ② withFailureHandler 記錄實際錯誤內容（舊版只顯示「連線失敗」，
+ *    看不出是逾時、權限還是後端 throw，之後查 log 就有依據）
+ * ③ ym 改為上傳當下計算（見 nowYm 說明）
+ * ============================================================ */
+$('upBtn').onclick = () => {
+  if (!currentDataUrl) return;
+  $('upBtn').disabled = true;
+  $('upBtn').textContent = '上傳中…';
+
+  const payload = {
+    room: $('room').value,
+    equip: $('equip').value,
+    item: $('item').value,
+    ym: nowYm(),               // ★上傳當下即時計算民國年月
+    dataUrl: currentDataUrl
+  };
+  console.log('[upload] 開始上傳：' + payload.room + ' / ' + payload.equip + ' / ' + payload.item + ' / ' + payload.ym);
+
+  const resetBtn = () => {
+    $('upBtn').disabled = false;
+    $('upBtn').textContent = '上傳並歸檔';
+  };
+
+  google.script.run
+    .withSuccessHandler(res => {
+      resetBtn();
+      if (res && res.ok) {
+        uploadedCount++;
+        console.log('[upload] 成功：' + res.name + '（第 ' + uploadedCount + ' 張）');
+        toast('已歸檔：' + res.name + ' | ' + (res.where || ''), 'ok');
+        $('preview').style.display = 'none';
+        currentDataUrl = null;
+        $('camInput').value = '';
+        $('galInput').value = '';
+        $('count').textContent = '本次已上傳 ' + uploadedCount + ' 張';
+      } else {
+        const msg = (res && res.error) ? res.error : '後端回傳格式異常';
+        console.error('[upload] 後端回報失敗：', res);
+        toast('上傳失敗：' + msg, 'err');
+      }
+    })
+    .withFailureHandler(err => {
+      resetBtn();
+      console.error('[upload] 連線/執行失敗：', err);
+      toast('連線失敗：' + (err && err.message ? err.message : '請重試'), 'err');
+    })
+    .uploadPhoto(payload);
+};
+
+/* ============================================================
+ * Toast 提示
+ * 修正舊版 bug：連續彈兩次 toast 時，第一次的 setTimeout 到點會把
+ * 「第二則還在顯示的訊息」提前關掉。改為記住計時器並先清除。
+ * ============================================================ */
+let toastTimer = null;
+function toast(msg, type) {
+  const t = $('toast');
+  if (toastTimer) clearTimeout(toastTimer);
+  t.textContent = msg;
+  t.className = 'show ' + (type || '');
+  toastTimer = setTimeout(() => {
+    t.className = t.className.replace('show', '').trim();
+    toastTimer = null;
+  }, 8000);
+}
+</script>
+</body>
+</html>
