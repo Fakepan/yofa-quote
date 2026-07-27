@@ -1,5 +1,5 @@
 /**
- * 高公局保養拍照 — v4 優化版後端 (Google Apps Script)
+ * 高公局保養拍照 — v4.3 自我修復版後端 (Google Apps Script)
  * =================================================================
  * 沿用 v3 的核心設計（完全不變）：
  *   1. Z 欄 TextFinder 動態定位（不用 8000 行 CELL_MAP）
@@ -16,6 +16,12 @@
  *   4. 參數防呆：dataUrl / room / item 缺漏時回明確錯誤，不再直接 throw
  *   5. 模板舊年月文字改為常數 TEMPLATE_OLD_YM_TEXT（改模板只需改一處）
  *   6. 關鍵步驟加 console.log（執行記錄可直接追蹤卡在哪一步）
+ *
+ * v4.3 自我修復（不需要手動執行任何工具函式）：
+ *   1. 上傳時偵測到定位鍵重複 → 自動重建該分頁 Z 欄後重新定位
+ *   2. 從模板建立新月份分頁時 → 自動重建新分頁 Z 欄（模板髒了也不影響新月份）
+ *   3. 同名多槽位（泰控空氣濾清器等）→ 依序填入第一個空格，
+ *      「照片」佔位文字視為空格；Drive 備份檔名加 _槽位N 避免互相覆蓋
  *
  * 試算表母版準備（與 v3 相同）：
  *   在每個照片槽位對應的 Z 欄格子，填入定位字串
@@ -93,16 +99,38 @@ function uploadPhoto(p) {
     console.log('[uploadPhoto] 目標分頁：' + targetTab);
 
     // 3. Z 欄 TextFinder 動態定位
-    //    ★v4.2★ findAll 取得該定位鍵的所有槽位：
-    //    - 找不到 → 報錯
-    //    - 一個槽位（絕大多數項目）→ 直接使用，重傳會覆蓋（原行為不變）
-    //    - 多個槽位（泰控機房的空氣濾清器等「同名多格」項目）→ 依序填入
-    //      第一個空格，全滿才報錯。母版文字完全不用改，同一選單項目
-    //      連續上傳會自動一格一格往下放。
-    const matches = sh.getRange('Z:Z')
+    let matches = sh.getRange('Z:Z')
       .createTextFinder(key)
       .matchEntireCell(true)
       .findAll();
+
+    // 3-1. ★v4.3 自我修復★
+    //     同一鍵出現多筆時，最常見原因是「模板列位移後殘留的舊鍵」。
+    //     偵測到就自動重建本分頁的 Z 欄、再查一次——不需要任何人工步驟。
+    //     每分頁 6 小時內只自動重建一次；重建後仍多筆 = 真正的同名多槽位，
+    //     交給步驟 4 依序填入。
+    if (matches.length > 1) {
+      const cache = CacheService.getScriptCache();
+      const flag  = 'zfix_' + targetTab;
+      if (!cache.get(flag)) {
+        const lock = LockService.getScriptLock();
+        lock.waitLock(30000);
+        try {
+          if (!cache.get(flag)) {
+            console.log('[uploadPhoto] 偵測到重複定位鍵，自動重建 Z 欄：' + targetTab);
+            rebuildZColumnFor_(sh);
+            cache.put(flag, '1', 21600);   // 6 小時內不重複重建
+          }
+        } finally {
+          lock.releaseLock();
+        }
+        matches = sh.getRange('Z:Z')
+          .createTextFinder(key)
+          .matchEntireCell(true)
+          .findAll();
+      }
+    }
+
     if (matches.length === 0) {
       console.warn('[uploadPhoto] Z 欄找不到定位鍵：' + key);
       return { ok: false, error: 'Z 欄找不到定位鍵：' + key };
@@ -110,8 +138,12 @@ function uploadPhoto(p) {
 
     // 4. 逐一解析槽位的照片格起始列
     //    （Z 鍵的下一列 + 合併儲存格校正安全網，勿移除；詳見 v4 註解）
+    //    多槽位（泰控空氣濾清器等「同名多格」項目）→ 依序填入第一個空格：
+    //      有照片 = 儲存格值是 CellImage 物件、或帶有公式（=IMAGE）
+    //      空槽位 = 空白「或任何純文字」——模板的「照片」佔位字也算空格
     const targetCol = 1;   // A 欄
-    let targetRow = -1, slotNo = 0;
+    let targetRow = -1, slotNo = 0, slotTotal = 0;
+    const seenRows = {};
     for (let m = 0; m < matches.length; m++) {
       let row = matches[m].getRow() + 1;
       try {
@@ -120,24 +152,24 @@ function uploadPhoto(p) {
       } catch (e) {
         console.warn('[uploadPhoto] 合併儲存格校正略過：' + e.message);
       }
-      if (matches.length === 1) { targetRow = row; slotNo = 1; break; }
-      // 多槽位：判斷該格是否已有「照片」
-      //   有照片 = 儲存格值是 CellImage 物件、或帶有公式（=IMAGE）
-      //   空槽位 = 空白「或任何純文字」——模板的「照片」佔位字也算空格
-      //   （v4.2.1 修正：原本用 isBlank()，會把佔位文字誤判成已滿）
+      if (seenRows[row]) continue;   // 校正後指向同一格的殘鍵只算一個槽位（雙保險）
+      seenRows[row] = true;
+      slotTotal++;
+      if (targetRow > 0) continue;   // 槽位已選定，僅繼續統計總數
+      if (matches.length === 1) { targetRow = row; slotNo = 1; continue; }
       const cell = sh.getRange(row, targetCol);
       const v = cell.getValue();
       const hasPhoto = (v !== null && typeof v === 'object') || cell.getFormula() !== '';
-      if (!hasPhoto) { targetRow = row; slotNo = m + 1; break; }
+      if (!hasPhoto) { targetRow = row; slotNo = slotTotal; }
     }
     if (targetRow < 0) {
-      console.warn('[uploadPhoto] 槽位全滿：' + key + '（共 ' + matches.length + ' 格）');
-      return { ok: false, error: '「' + key + '」的 ' + matches.length + ' 個槽位都已有照片；要更換請先到試算表清空要重拍的那一格再上傳' };
+      console.warn('[uploadPhoto] 槽位全滿：' + key + '（共 ' + slotTotal + ' 格）');
+      return { ok: false, error: '「' + key + '」的 ' + slotTotal + ' 個槽位都已有照片；要更換請先到試算表清空要重拍的那一格再上傳' };
     }
 
     // 4-2. 備份原檔到 Drive（設為公開可讀，CellImage 才讀得到）
     //      多槽位時檔名加「_槽位N」：避免互相覆蓋、造成先前槽位圖片斷鏈
-    const suffix = (matches.length > 1) ? '_槽位' + slotNo : '';
+    const suffix = (slotTotal > 1) ? '_槽位' + slotNo : '';
     const fileId = backupAndGetId_(p, blob, suffix);
     console.log('[uploadPhoto] Drive 備份完成 fileId=' + fileId);
 
@@ -185,7 +217,7 @@ function uploadPhoto(p) {
       ok: true,
       name: key + '.jpg',
       where: targetTab + '!A' + targetRow +
-             (matches.length > 1 ? ' | 槽位' + slotNo + '/' + matches.length : '') +
+             (slotTotal > 1 ? ' | 槽位' + slotNo + '/' + slotTotal : '') +
              ' | 容器404x330 | ' + method + ' | 已入格'
     };
 
@@ -227,6 +259,10 @@ function getOrCreateMonthSheet_(ss, targetTab) {
       sh.createTextFinder(TEMPLATE_OLD_YM_TEXT)
         .replaceAllWith(yearROC + '年' + monthNum + '月');
     }
+
+    // ★v4.3★ 新分頁建立後立即重建 Z 欄：
+    //   就算模板 Z 欄殘留舊鍵，每個新月份分頁一出生就是乾淨的
+    rebuildZColumnFor_(sh);
 
     // 確保寫入落盤後才放鎖，避免其他請求拿到「半成品」分頁
     SpreadsheetApp.flush();
