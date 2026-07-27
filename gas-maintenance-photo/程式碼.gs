@@ -121,8 +121,14 @@ function uploadPhoto(p) {
         console.warn('[uploadPhoto] 合併儲存格校正略過：' + e.message);
       }
       if (matches.length === 1) { targetRow = row; slotNo = 1; break; }
-      // 多槽位：isBlank 判斷該格是否已有照片（CellImage 或 IMAGE 公式都算非空）
-      if (sh.getRange(row, targetCol).isBlank()) { targetRow = row; slotNo = m + 1; break; }
+      // 多槽位：判斷該格是否已有「照片」
+      //   有照片 = 儲存格值是 CellImage 物件、或帶有公式（=IMAGE）
+      //   空槽位 = 空白「或任何純文字」——模板的「照片」佔位字也算空格
+      //   （v4.2.1 修正：原本用 isBlank()，會把佔位文字誤判成已滿）
+      const cell = sh.getRange(row, targetCol);
+      const v = cell.getValue();
+      const hasPhoto = (v !== null && typeof v === 'object') || cell.getFormula() !== '';
+      if (!hasPhoto) { targetRow = row; slotNo = m + 1; break; }
     }
     if (targetRow < 0) {
       console.warn('[uploadPhoto] 槽位全滿：' + key + '（共 ' + matches.length + ' 格）');
