@@ -291,9 +291,24 @@ function backupAndGetId_(p, blob, suffix) {
   return file.getId();
 }
 
+/**
+ * 取得或建立資料夾
+ * ★v4.3.1★ 建立前加鎖＋二次檢查：月初兩人同毫秒上傳時，
+ * 舊寫法會各建一個同名資料夾（Drive 允許同名），備份檔因此散落兩處。
+ * 資料夾已存在時走快路徑，完全不進鎖、不影響日常速度。
+ */
 function getOrCreate_(parent, name) {
-  const it = parent.getFoldersByName(name);
-  return it.hasNext() ? it.next() : parent.createFolder(name);
+  let it = parent.getFoldersByName(name);
+  if (it.hasNext()) return it.next();   // 快路徑：已存在
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    it = parent.getFoldersByName(name); // 拿到鎖後再查一次
+    return it.hasNext() ? it.next() : parent.createFolder(name);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** 每月開新報表：複製母版、清空 A 欄 IMAGE 公式（保留文字格線與 Z 欄定位） */
