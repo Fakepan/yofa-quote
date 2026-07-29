@@ -17,6 +17,12 @@
  *   5. 模板舊年月文字改為常數 TEMPLATE_OLD_YM_TEXT（改模板只需改一處）
  *   6. 關鍵步驟加 console.log（執行記錄可直接追蹤卡在哪一步）
  *
+ * v4.5（A 方案：拍攝日為準）：
+ *   1. 前端從照片 EXIF 讀出拍攝日（p.shotYmd）；施工/完工日期、月份分頁、
+ *      Drive 資料夾全部以拍攝日推導，補傳自動歸回正確月份
+ *   2. 讀不到 EXIF → 退回上傳日（單次取時間，跨年瞬間不撕裂）
+ *   3. 日期掃描加邊界夾限，槽位在試算表最底部也能正確寫入日期
+ *
  * v4.3 自我修復（不需要手動執行任何工具函式）：
  *   1. 上傳時偵測到定位鍵重複 → 自動重建該分頁 Z 欄後重新定位
  *   2. 從模板建立新月份分頁時 → 自動重建新分頁 Z 欄（模板髒了也不影響新月份）
@@ -75,6 +81,24 @@ function uploadPhoto(p) {
     );
     console.log('[uploadPhoto] 開始：' + key);
 
+    // ★v4.5 A 方案★ 基準日：優先用前端從照片 EXIF 讀出的「拍攝日」(p.shotYmd,
+    // 格式 YYYY-MM-DD)；讀不到或格式不合法 → 退回伺服器當下日期。
+    // 之後「月份分頁、施工/完工日期」全部由同一個基準日推導，
+    // 補傳照片會自動歸回拍攝當月，跨年瞬間也不會出現分頁與日期不一致。
+    let baseY, baseM, baseD, dateSource;
+    const sm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(p.shotYmd || ''));
+    if (sm && +sm[1] >= 2020 && +sm[1] <= 2100 &&
+        +sm[2] >= 1 && +sm[2] <= 12 && +sm[3] >= 1 && +sm[3] <= 31) {
+      baseY = +sm[1]; baseM = +sm[2]; baseD = +sm[3]; dateSource = '拍攝日';
+    } else {
+      // 伺服器日期只取一次再拆解，年月日永遠來自同一瞬間（跨年不撕裂）
+      const nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd').split('-');
+      baseY = +nowStr[0]; baseM = +nowStr[1]; baseD = +nowStr[2]; dateSource = '上傳日';
+    }
+    const pad2 = function (n) { return ('0' + n).slice(-2); };
+    const rocDate = (baseY - 1911) + '/' + pad2(baseM) + '/' + pad2(baseD);   // 例：115/08/01
+    console.log('[uploadPhoto] 基準日：' + rocDate + '（' + dateSource + '）');
+
     // 1.（v4.2 調整順序）Drive 備份移到「定位完成之後」執行：
     //    多槽位項目需要用槽位編號命名備份檔，避免互相覆蓋
 
@@ -87,11 +111,11 @@ function uploadPhoto(p) {
       return { ok: false, error: '無法開啟試算表:' + e.message };
     }
 
-    // 檢查前端傳來的 tabName；如果空白、或是選到「模板」，就自動導向當前年月
+    // 檢查前端傳來的 tabName；如果空白、或是選到「模板」，
+    // ★v4.5★ 就導向「基準日」的年月分頁（拍攝日優先 → 補傳自動歸回正確月份）
     let targetTab = p.tabName;
     if (!targetTab || targetTab === TEMPLATE_TAB_NAME) {
-      const now = new Date();
-      targetTab = '' + now.getFullYear() + ('0' + (now.getMonth() + 1)).slice(-2);
+      targetTab = '' + baseY + pad2(baseM);
     }
 
     // 取得當月分頁；不存在就從模板建立（內含 LockService 防併發，見下方函式）
@@ -217,14 +241,15 @@ function uploadPhoto(p) {
     //      絕不整頁取代，不會誤傷其他還沒保養的設備日期
     let dateNote = '';
     try {
-      const now = new Date();
-      const tz  = Session.getScriptTimeZone();   // 依專案時區（Asia/Taipei）
-      // 民國年 = 西元年 - 1911；月日補零 → 例：2026-07-27 → 115/07/27
-      const rocDate = (parseInt(Utilities.formatDate(now, tz, 'yyyy'), 10) - 1911) +
-                      '/' + Utilities.formatDate(now, tz, 'MM/dd');
+      // rocDate 已在函式開頭由「基準日」（拍攝日優先）算好，這裡直接使用
+
+      // ★v4.5 邊界夾限★ 槽位落在試算表最底部時，讀取範圍不能超過總列數，
+      // 否則 getRange 會拋 out of range（最後一台設備的日期會靜默漏寫）
+      const scanRows = Math.min(BOX_ROWS, sh.getMaxRows() - targetRow + 1);
+      if (scanRows < 1) throw new Error('槽位超出試算表範圍（targetRow=' + targetRow + '）');
 
       // 一次 getValues 讀入本槽位範圍的 F 欄（僅 1 次讀取 API）
-      const fVals = sh.getRange(targetRow, 6, BOX_ROWS, 1).getValues();
+      const fVals = sh.getRange(targetRow, 6, scanRows, 1).getValues();
       const hit = [];   // 記錄需要改寫的列位移（相對 targetRow）
       for (let r = 0; r < fVals.length; r++) {
         const t = String(fVals[r][0] || '').trim();
@@ -248,8 +273,9 @@ function uploadPhoto(p) {
             sh.getRange(targetRow + r, 6).setValue(fVals[r][0]);
           });
         }
-        dateNote = ' | 日期' + rocDate;
-        console.log('[uploadPhoto] 施工/完工日期已更新：' + rocDate + '（' + hit.length + ' 格）');
+        dateNote = ' | 日期' + rocDate + '(' + dateSource + ')';
+        console.log('[uploadPhoto] 施工/完工日期已更新：' + rocDate +
+                    '（' + dateSource + '，' + hit.length + ' 格）');
       } else {
         console.warn('[uploadPhoto] 槽位範圍內未找到施工/完工日期欄（不影響照片歸檔）');
       }

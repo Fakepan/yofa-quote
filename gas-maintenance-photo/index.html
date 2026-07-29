@@ -53,7 +53,7 @@
 <body>
 <header>
   <b>佑發 · 保養拍照</b>
-  <span>高速公路局 · 選好位置直接拍，自動歸檔　<b style="opacity:.55">v5 強化版</b></span>
+  <span>高速公路局 · 選好位置直接拍，自動歸檔　<b style="opacity:.55">v6 拍攝日版</b></span>
 </header>
 
 <div class="wrap">
@@ -97,6 +97,7 @@
   <div id="preview">
     <img id="previewImg" alt="預覽">
     <div class="cropinfo" id="cropInfo"></div>
+    <div class="note" id="shotInfo" style="display:none"></div>
     <button class="upbtn" id="upBtn">上傳並歸檔</button>
     <button class="retake" id="retakeBtn">重新選擇</button>
   </div>
@@ -117,6 +118,7 @@ const MAX_FILE_MB = 25;        // 原始檔案大小上限（MB），超過視�
 const MENU_RETRY  = 3;         // 選單載入失敗時的自動重試次數
 
 let MENU = {}, uploadedCount = 0, currentDataUrl = null;
+let currentShotYmd = null;   // ★v6★ 照片 EXIF 拍攝日（YYYY-MM-DD），讀不到為 null
 const $ = id => document.getElementById(id);
 
 /* ============================================================
@@ -128,6 +130,68 @@ const $ = id => document.getElementById(id);
 function nowYm() {
   const d = new Date();
   return (d.getFullYear() - 1911) + '年' + (d.getMonth() + 1) + '月';
+}
+
+/* ============================================================
+ * ★v6★ 照片 EXIF 拍攝日
+ * 手機拍照時會把拍攝時間寫進 JPEG 檔案（EXIF），這裡直接從檔案
+ * 開頭的二進位資料把它讀出來（不需要任何外部函式庫）。
+ * 讀到 → 施工/完工日期、月份分頁、Drive 資料夾都以拍攝日為準（A 方案）
+ * 讀不到（截圖、通訊軟體壓縮過的圖…）→ 自動退回上傳當天
+ * ============================================================ */
+function parseExifDate(buf) {
+  try {
+    const v = new DataView(buf);
+    if (v.getUint16(0) !== 0xFFD8) return null;              // 不是 JPEG
+    let o = 2;
+    while (o + 4 < v.byteLength) {
+      const marker = v.getUint16(o), size = v.getUint16(o + 2);
+      if (marker === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) {  // APP1 'Exif'
+        const t = o + 10;                                     // TIFF 標頭起點
+        const little = v.getUint16(t) === 0x4949;             // 'II' = 小端序
+        const g16 = x => v.getUint16(x, little), g32 = x => v.getUint32(x, little);
+        const dirs = [t + g32(t + 4)];                        // IFD0
+        const found = {};
+        while (dirs.length) {
+          const d = dirs.shift();
+          const n = g16(d);
+          for (let i = 0; i < n; i++) {
+            const e = d + 2 + i * 12, tag = g16(e);
+            if (tag === 0x8769) dirs.push(t + g32(e + 8));    // Exif 子目錄
+            if (tag === 0x9003 || tag === 0x0132) {           // 原始拍攝時間 / 修改時間
+              const cnt = g32(e + 4), off = cnt > 4 ? t + g32(e + 8) : e + 8;
+              let s = '';
+              for (let j = 0; j < Math.min(cnt, 19); j++) s += String.fromCharCode(v.getUint8(off + j));
+              found[tag] = s;
+            }
+          }
+        }
+        const s = found[0x9003] || found[0x0132];             // 優先「原始拍攝時間」
+        const m = /^(\d{4}):(\d{2}):(\d{2})/.exec(s || '');
+        return m ? m[1] + '-' + m[2] + '-' + m[3] : null;
+      }
+      if ((marker & 0xFF00) !== 0xFF00) break;                // 不是合法區段，停止
+      o += 2 + size;
+    }
+  } catch (e) { console.warn('[exif] 解析失敗（不影響上傳）', e); }
+  return null;
+}
+
+/* 拍攝日 YYYY-MM-DD → 民國顯示與民國年月（Drive 資料夾用） */
+function rocFromYmd(ymd) {
+  const p = ymd.split('-');
+  return (+p[0] - 1911) + '/' + p[1] + '/' + p[2];
+}
+function ymFromYmd(ymd) {
+  const p = ymd.split('-');
+  return (+p[0] - 1911) + '年' + (+p[1]) + '月';
+}
+function updateShotInfo() {
+  const el = $('shotInfo');
+  el.style.display = 'block';
+  el.textContent = currentShotYmd
+    ? '📅 拍攝日期：' + rocFromYmd(currentShotYmd) + '（日期與月份歸檔以此為準）'
+    : '📅 讀不到拍攝日期，將以「上傳當天」為準';
 }
 
 /* ============================================================
@@ -229,7 +293,9 @@ $('retakeBtn').onclick = () => {
   $('camInput').value = '';
   $('galInput').value = '';
   $('preview').style.display = 'none';
+  $('shotInfo').style.display = 'none';
   currentDataUrl = null;
+  currentShotYmd = null;
 };
 
 // 兩個 input 都走同一個處理流程
@@ -257,6 +323,13 @@ function handleFile(file) {
       toast('檔案超過 ' + MAX_FILE_MB + 'MB，請改用一般照片模式拍攝', 'err');
       return;
     }
+
+    // ★v6★ 先讀 EXIF 拍攝日（只讀檔案開頭 256KB，速度極快；與壓縮平行進行）
+    currentShotYmd = null;
+    const fr = new FileReader();
+    fr.onload  = () => { currentShotYmd = parseExifDate(fr.result); updateShotInfo(); };
+    fr.onerror = () => updateShotInfo();
+    fr.readAsArrayBuffer(file.slice(0, 262144));
 
     const objUrl = URL.createObjectURL(file);
     compress(objUrl, () => URL.revokeObjectURL(objUrl));
@@ -359,7 +432,9 @@ $('upBtn').onclick = () => {
     room: $('room').value,
     equip: $('equip').value,
     item: $('item').value,
-    ym: nowYm(),               // ★上傳當下即時計算民國年月
+    // ★v6 A 方案★ Drive 資料夾年月：有拍攝日用拍攝日，否則用上傳當天
+    ym: currentShotYmd ? ymFromYmd(currentShotYmd) : nowYm(),
+    shotYmd: currentShotYmd || '',   // 後端據此決定施工/完工日期與月份分頁
     dataUrl: currentDataUrl
   };
   console.log('[upload] 開始上傳：' + payload.room + ' / ' + payload.equip + ' / ' + payload.item + ' / ' + payload.ym);
