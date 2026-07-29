@@ -211,6 +211,52 @@ function uploadPhoto(p) {
       targetCell.setFormula('=IMAGE("' + imageUrl + '",1)');
     }
 
+    // 8. ★v4.4 新增★ 自動填寫施工/完工日期（民國年格式，如 115/07/27）
+    //    - 只在照片成功入格後執行；獨立 try...catch，日期失敗不影響照片歸檔
+    //    - 只掃描「本槽位」targetRow 起算 BOX_ROWS（10）列的 F 欄，
+    //      絕不整頁取代，不會誤傷其他還沒保養的設備日期
+    let dateNote = '';
+    try {
+      const now = new Date();
+      const tz  = Session.getScriptTimeZone();   // 依專案時區（Asia/Taipei）
+      // 民國年 = 西元年 - 1911；月日補零 → 例：2026-07-27 → 115/07/27
+      const rocDate = (parseInt(Utilities.formatDate(now, tz, 'yyyy'), 10) - 1911) +
+                      '/' + Utilities.formatDate(now, tz, 'MM/dd');
+
+      // 一次 getValues 讀入本槽位範圍的 F 欄（僅 1 次讀取 API）
+      const fVals = sh.getRange(targetRow, 6, BOX_ROWS, 1).getValues();
+      const hit = [];   // 記錄需要改寫的列位移（相對 targetRow）
+      for (let r = 0; r < fVals.length; r++) {
+        const t = String(fVals[r][0] || '').trim();
+        // 比對不強制要冒號：母版第 6446 列有「完工日期115/05/08」漏冒號的 typo，
+        // 寫回時一律用標準「施工日期:/完工日期:」格式，順手矯正
+        if (t.startsWith('施工日期'))      { fVals[r][0] = '施工日期:' + rocDate; hit.push(r); }
+        else if (t.startsWith('完工日期')) { fVals[r][0] = '完工日期:' + rocDate; hit.push(r); }
+      }
+
+      if (hit.length > 0) {
+        // 施工/完工在模板中相鄰 → 取連續子範圍一次 setValues 寫回（僅 1 次寫入 API）；
+        // 萬一格式特殊不相鄰則退回逐格寫。兩種路徑都只碰「日期格」本身，
+        // 不整段回寫 F 欄，避免覆蓋機房名稱/照片說明等其他文字
+        const first = hit[0], last = hit[hit.length - 1];
+        if (last - first + 1 === hit.length) {
+          const sub = [];
+          for (let r = first; r <= last; r++) sub.push(fVals[r]);
+          sh.getRange(targetRow + first, 6, sub.length, 1).setValues(sub);
+        } else {
+          hit.forEach(function (r) {
+            sh.getRange(targetRow + r, 6).setValue(fVals[r][0]);
+          });
+        }
+        dateNote = ' | 日期' + rocDate;
+        console.log('[uploadPhoto] 施工/完工日期已更新：' + rocDate + '（' + hit.length + ' 格）');
+      } else {
+        console.warn('[uploadPhoto] 槽位範圍內未找到施工/完工日期欄（不影響照片歸檔）');
+      }
+    } catch (e) {
+      console.warn('[uploadPhoto] 日期更新失敗（照片已入格，不影響）：' + e.message);
+    }
+
     console.log('[uploadPhoto] 完成：' + key + ' → ' + targetTab + '!A' + targetRow +
                 '，耗時 ' + (Date.now() - t0) + ' ms');
     return {
@@ -218,7 +264,7 @@ function uploadPhoto(p) {
       name: key + '.jpg',
       where: targetTab + '!A' + targetRow +
              (slotTotal > 1 ? ' | 槽位' + slotNo + '/' + slotTotal : '') +
-             ' | 容器404x330 | ' + method + ' | 已入格'
+             ' | 容器404x330 | ' + method + ' | 已入格' + dateNote
     };
 
   } catch (err) {
