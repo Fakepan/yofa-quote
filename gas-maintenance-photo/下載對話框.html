@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root{ --navy:#1F3864; --blue:#1a73e8; --ink:#1a2233; --sub:#6b7686; --line:#e0e4ea; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:22px 24px;
+    font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+    color:var(--ink); background:#fff; text-align:center;
+  }
+  .icon{ font-size:38px; line-height:1; margin-bottom:8px; }
+  h3{ margin:0 0 4px; font-size:18px; color:var(--navy); }
+  .sub{ font-size:13px; color:var(--sub); margin-bottom:16px; }
+  /* 規格小標籤：讓行政人員一眼確認格式正確，蓋章不會跑位 */
+  .spec{
+    display:flex; flex-wrap:wrap; gap:6px; justify-content:center;
+    margin-bottom:18px;
+  }
+  .spec span{
+    font-size:11px; color:var(--sub); background:#f1f3f7;
+    border:1px solid var(--line); border-radius:20px; padding:3px 10px;
+  }
+  .btn{
+    display:block; width:100%; padding:14px;
+    background:var(--blue); color:#fff; text-decoration:none;
+    font-size:16px; font-weight:700; border-radius:10px;
+    transition:background .15s;
+  }
+  .btn:hover{ background:#1557b0; }
+  .note{ font-size:11px; color:var(--sub); margin-top:12px; line-height:1.6; }
+</style>
+</head>
+<body>
+  <div class="icon">📄</div>
+  <h3><?= title ?> 保養檢查照片</h3>
+  <div class="sub">分頁：<?= tabName ?></div>
+
+  <div class="spec">
+    <span>A4 直式</span>
+    <span>符合頁寬</span>
+    <span>無格線</span>
+    <span>僅 A~G 欄</span>
+  </div>
+
+  <!-- 直接用 <a> 下載：瀏覽器帶著使用者已登入的 Google 身分去取檔，
+       不受 Apps Script 的檔案大小與執行時間限制 -->
+  <a class="btn" id="dl" href="<?= url ?>" target="_blank" rel="noopener">
+    點擊這裡下載 <?= tabName ?> PDF 報表
+  </a>
+
+  <div class="note">
+    檔案會在新分頁開始下載，本視窗將自動關閉。<br>
+    若沒有反應，請允許瀏覽器的彈出視窗。
+  </div>
+
+<script>
+  // 按下後延遲關閉：留 1.2 秒讓瀏覽器完成開啟下載分頁，
+  // 太快關閉對話框在部分瀏覽器會導致下載被取消
+  document.getElementById('dl').addEventListener('click', function () {
+    setTimeout(function () { google.script.host.close(); }, 1200);
+  });
+</script>
+</body>
+</html>
