@@ -53,7 +53,7 @@
 <body>
 <header>
   <b>佑發 · 保養拍照</b>
-  <span>高速公路局 · 選好位置直接拍，自動歸檔　<b style="opacity:.55">v6 拍攝日版</b></span>
+  <span>高速公路局 · 選好位置直接拍，自動歸檔　<b style="opacity:.55">v7 等比縮放補白邊</b></span>
 </header>
 
 <div class="wrap">
@@ -340,8 +340,12 @@ function handleFile(file) {
 }
 
 /* ============================================================
- * 裁切成容器比例 404:330 + 壓縮（★邏輯與 v4 完全相同，零白邊的關鍵★)
- * 新增：img.onerror（照片解碼失敗時舊版會「毫無反應」）、try...catch
+ * ★v7 Contain 等比縮放 + 補白邊★（取代 v4~v6 的 Cover 置中裁切）
+ * 修正原因：時間相機 App 的「左上角 GPS 地圖」與「右上角時間浮水印」位在
+ * 畫面最邊緣，舊版為了零白邊而裁切邊緣，會讓這些送審必要資訊消失，
+ * 導致工程驗收被退件。
+ * 新策略：原圖 100% 保留 → 等比縮小塞進 404:330 比例畫布 → 剩餘空間補純白。
+ * 輸出比例仍吻合容器，放進儲存格不會變形。
  * done：載入結束後的回呼，用來釋放 objectURL
  * ============================================================ */
 function compress(src, done) {
@@ -351,48 +355,55 @@ function compress(src, done) {
     try {
       const cv = $('cv'), ctx = cv.getContext('2d');
 
-      // ① 依 BOX_RATIO 計算裁切區域（來源座標）
-      let sx = 0, sy = 0, sw = img.width, sh = img.height;
-      if (!sw || !sh) throw new Error('照片尺寸為 0，可能是損毀檔');
-      const imgRatio = sw / sh;
+      const iw = img.width, ih = img.height;
+      if (!iw || !ih) throw new Error('照片尺寸為 0，可能是損毀檔');
 
-      if (imgRatio > BOX_RATIO) {
-        // 照片比容器寬 → 裁掉左右兩側（高度完整保留，頂端浮水印不受影響）
-        const newW = Math.round(sh * BOX_RATIO);
-        sx = Math.round((sw - newW) / 2);   // 置中裁切
-        sw = newW;
-      } else if (imgRatio < BOX_RATIO) {
-        // 照片比容器高 → 裁掉底部（從頂端開始保留，確保時間浮水印完整）
-        sh = Math.round(sw / BOX_RATIO);
-        sy = 0;
-      }
+      // ① 畫布尺寸：固定為容器比例 BOX_RATIO，最長邊不超過 MAX_SIDE
+      //    （比例吻合容器 → 放進儲存格不會被二次縮放變形）
+      let outW = MAX_SIDE;
+      let outH = Math.round(MAX_SIDE / BOX_RATIO);
 
-      // ② 輸出尺寸：等比縮到最長邊 MAX_SIDE
-      let outW = sw, outH = sh;
-      if (outW > MAX_SIDE) {
-        outH = Math.round(outH * MAX_SIDE / outW);
-        outW = MAX_SIDE;
-      }
+      // ② ★Contain 等比縮放★：算出「能完整塞進畫布」的縮放比
+      //    取寬高兩個縮放比中「較小」者 → 保證原圖每一個像素都在畫布內，
+      //    時間相機的左上角 GPS 地圖與右上角時間浮水印 100% 不會被裁掉。
+      //    原圖比畫布小時 scale 會 >1，此處夾在 1 以內避免放大失真。
+      const scale = Math.min(outW / iw, outH / ih, 1);
+      const drawW = Math.round(iw * scale);
+      const drawH = Math.round(ih * scale);
 
-      // ③ 裁切 + 縮放一次完成
+      // ③ 置中：多出來的空間平均分配到上下（或左右）
+      const dx = Math.round((outW - drawW) / 2);
+      const dy = Math.round((outH - drawH) / 2);
+
+      // ④ 先鋪滿純白背景，再把等比縮小後的完整原圖畫上去
+      //    （不先填白的話，JPEG 沒有透明通道，空白處會變成黑色）
       cv.width = outW; cv.height = outH;
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, outW, outH);
+      ctx.imageSmoothingQuality = 'high';   // 縮圖品質，讓浮水印文字保持清晰
+      ctx.drawImage(img, 0, 0, iw, ih, dx, dy, drawW, drawH);
 
       currentDataUrl = cv.toDataURL('image/jpeg', JPEG_Q);
       $('previewImg').src = currentDataUrl;
       $('preview').style.display = 'block';
-      console.log('[compress] 原圖 ' + img.width + 'x' + img.height +
-        ' → 輸出 ' + outW + 'x' + outH +
-        '，約 ' + Math.round(currentDataUrl.length * 3 / 4 / 1024) + ' KB');
 
-      // ★自我驗證：顯示裁切後比例，確認裁切確實生效★
+      // 白邊方向與厚度（僅供顯示，讓現場確認畫面完整）
+      const padSide = (dy > dx) ? '上下' : (dx > 0 ? '左右' : '無');
+      const padPx   = Math.max(dx, dy);
+      console.log('[compress] 原圖 ' + iw + 'x' + ih +
+        ' → 畫布 ' + outW + 'x' + outH + '（圖 ' + drawW + 'x' + drawH +
+        '，白邊 ' + padSide + ' ' + padPx + 'px），約 ' +
+        Math.round(currentDataUrl.length * 3 / 4 / 1024) + ' KB');
+
+      // ★自我驗證：確認輸出比例吻合容器，且原圖完整無裁切★
       const outRatio = outW / outH;
       const diff = Math.abs(outRatio - BOX_RATIO);
       const info = $('cropInfo');
       if (diff < 0.01) {
         info.className = 'cropinfo';
-        info.textContent = '✓ 已裁切 ' + outW + '×' + outH +
-          '（比例 ' + outRatio.toFixed(3) + '，容器 ' + BOX_RATIO.toFixed(3) + '）零白邊';
+        info.textContent = '✓ 等比縮放補白邊 ' + outW + '×' + outH +
+          '（原圖完整保留，浮水印未裁切；白邊：' +
+          (padSide === '無' ? '無' : padSide + ' ' + padPx + 'px') + '）';
       } else {
         info.className = 'cropinfo bad';
         info.textContent = '⚠ 比例不符 ' + outRatio.toFixed(3) +
