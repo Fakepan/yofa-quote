@@ -76,10 +76,28 @@ function uploadPhoto(p) {
     if (parts.length < 2 || !parts[1]) {
       return { ok: false, error: '照片資料格式錯誤（dataUrl 非 base64）' };
     }
-    const blob = Utilities.newBlob(
-      Utilities.base64Decode(parts[1]), 'image/jpeg', key + '.jpg'
-    );
-    console.log('[uploadPhoto] 開始：' + key);
+
+    // ★v4.6 破圖防護★ base64 解碼獨立攔截
+    //   舊手機過熱／訊號中斷時，dataUrl 可能只傳一半。
+    //   若剛好斷在 4 的倍數，base64 仍能「合法解碼」成半張 JPEG →
+    //   會一路存進 Drive 並寫入儲存格，變成報表上的破圖。必須在此擋下。
+    let bytes;
+    try {
+      bytes = Utilities.base64Decode(parts[1]);
+    } catch (e) {
+      console.warn('[uploadPhoto] base64 解碼失敗：' + e.message);
+      return { ok: false, error: '照片資料損毀（解碼失敗），請重新拍攝或重新選擇照片' };
+    }
+
+    // JPEG 完整性三重檢查（GAS 的位元組是有號值：0xFF=-1、0xD8=-40、0xD9=-39）
+    const badReason = validateJpegBytes_(bytes);
+    if (badReason) {
+      console.warn('[uploadPhoto] 照片不完整：' + badReason + '（' + bytes.length + ' bytes）');
+      return { ok: false, error: '照片傳輸不完整（' + badReason + '），請在訊號較好的地方重新上傳' };
+    }
+
+    const blob = Utilities.newBlob(bytes, 'image/jpeg', key + '.jpg');
+    console.log('[uploadPhoto] 開始：' + key + '，照片 ' + Math.round(bytes.length / 1024) + ' KB');
 
     // ★v4.5 A 方案★ 基準日：優先用前端從照片 EXIF 讀出的「拍攝日」(p.shotYmd,
     // 格式 YYYY-MM-DD)；讀不到或格式不合法 → 退回伺服器當下日期。
@@ -138,7 +156,7 @@ function uploadPhoto(p) {
       const flag  = 'zfix_' + targetTab;
       if (!cache.get(flag)) {
         const lock = LockService.getScriptLock();
-        lock.waitLock(30000);
+        lock.waitLock(60000);   // v4.6：月初分頁建立含 Z 欄重建較久，等候放寬到 60 秒
         try {
           if (!cache.get(flag)) {
             console.log('[uploadPhoto] 偵測到重複定位鍵，自動重建 Z 欄：' + targetTab);
@@ -295,7 +313,17 @@ function uploadPhoto(p) {
 
   } catch (err) {
     console.error('[uploadPhoto] 未預期錯誤：' + err + (err && err.stack ? '\n' + err.stack : ''));
-    return { ok: false, error: String(err) };
+    // ★v4.6★ 把系統原文錯誤翻成現場看得懂的說法（師傅看不懂 Lock timeout / Timed out）
+    const raw = String(err);
+    let friendly = raw;
+    if (/lock|timed out|timeout/i.test(raw)) {
+      friendly = '系統忙碌中（其他人正在上傳），請等 10 秒後再按一次上傳';
+    } else if (/quota|limit/i.test(raw)) {
+      friendly = '今日用量已達 Google 上限，請明天再試或聯絡管理者';
+    } else if (/permission|access|authoriz/i.test(raw)) {
+      friendly = '權限不足，請聯絡管理者確認試算表與 Drive 資料夾的存取權';
+    }
+    return { ok: false, error: friendly };
   }
 }
 
@@ -311,7 +339,7 @@ function getOrCreateMonthSheet_(ss, targetTab) {
   if (sh) return sh;   // 快路徑：分頁已存在（絕大多數情況），不用進鎖
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);   // 最多等 30 秒
+  lock.waitLock(60000);   // v4.6：月初分頁建立含 Z 欄重建較久，等候放寬到 60 秒
   try {
     // 拿到鎖後再查一次：可能等待期間已被另一個請求建立
     sh = ss.getSheetByName(targetTab);
@@ -374,7 +402,7 @@ function getOrCreate_(parent, name) {
   if (it.hasNext()) return it.next();   // 快路徑：已存在
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  lock.waitLock(60000);   // v4.6：月初分頁建立含 Z 欄重建較久，等候放寬到 60 秒
   try {
     it = parent.getFoldersByName(name); // 拿到鎖後再查一次
     return it.hasNext() ? it.next() : parent.createFolder(name);
@@ -518,6 +546,28 @@ function rebuildZColumnFor_(sh) {
   sh.getRange(1, Z_COL, lastRow, 1).setValues(zVals);   // 一次寫回
   SpreadsheetApp.flush();
   return '重建完成，共寫入 ' + written + ' 個定位鍵';
+}
+
+/**
+ * ★v4.6★ JPEG 完整性檢查：回傳 null = 正常，回傳字串 = 不合格原因
+ * 三道防線（實測可攔下「傳一半就斷」「極短殘骸」「非 JPEG」）：
+ *   ① 檔案過小：正常照片經前端壓縮後至少數十 KB，3KB 以下必為殘骸
+ *   ② 檔頭 FFD8（SOI）：不是 JPEG 就擋
+ *   ③ 檔尾 FFD9（EOI）：★截斷偵測的關鍵★ 傳一半的檔案結尾必定不是 FFD9
+ * 已知限制：頭尾都在、僅中段損毀的檔案無法由位元組判斷（機率極低，
+ *   且此類檔案 Google 圖床通常仍能顯示大部分內容）。
+ */
+function validateJpegBytes_(bytes) {
+  if (!bytes || bytes.length < 3000) {
+    return '檔案過小 ' + (bytes ? bytes.length : 0) + ' bytes';
+  }
+  if (bytes[0] !== -1 || bytes[1] !== -40) {          // 0xFF 0xD8
+    return '非 JPEG 檔頭';
+  }
+  if (bytes[bytes.length - 2] !== -1 || bytes[bytes.length - 1] !== -39) {   // 0xFF 0xD9
+    return '檔尾遺失，照片只傳了一部分';
+  }
+  return null;
 }
 
 /** 診斷用：在 Apps Script 執行這個，看看試算表能不能開 */
