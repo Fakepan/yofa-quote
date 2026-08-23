@@ -637,6 +637,99 @@ function clearTemplatePhotos() {
   return msg;
 }
 
+/**
+ * ★以「第 1 頁」為標準，把列高套用到全部頁面★
+ * 問題：每頁列數都一樣（39 列），但列高不一致 → 有些頁照片格變矮、
+ *      廠商用印往上浮、下方留一大片空白。
+ * 做法：讀第 1 頁的 39 個列高當黃金標準，原封不動複製到其餘每一頁。
+ *      欄寬 A~D 也一併對齊第 1 頁。
+ * ⚠ 只改「列高與欄寬」，不動任何文字、照片、合併儲存格、框線。
+ *
+ * 執行方式：函式下拉選單選 normalizeTemplateLayout → 執行
+ * 若中途逾時：改跑 normalizeTemplateLayoutPart1 / Part2（各做一半）
+ */
+function normalizeTemplateLayout() {
+  return normalizeLayout_(TEMPLATE_TAB_NAME, 1, 99999);
+}
+function normalizeTemplateLayoutPart1() {
+  return normalizeLayout_(TEMPLATE_TAB_NAME, 1, 115);
+}
+function normalizeTemplateLayoutPart2() {
+  return normalizeLayout_(TEMPLATE_TAB_NAME, 116, 99999);
+}
+
+/**
+ * 核心：把指定分頁的每一頁列高，統一成第 1 頁的樣子
+ * @param {string} tabName  分頁名稱
+ * @param {number} fromPage 從第幾頁開始處理（1 起算）
+ * @param {number} toPage   處理到第幾頁
+ */
+function normalizeLayout_(tabName, fromPage, toPage) {
+  const t0 = Date.now();
+  const ss = SpreadsheetApp.openById(MASTER_SHEET_ID);
+  const sh = ss.getSheetByName(tabName);
+  if (!sh) throw new Error('找不到分頁：' + tabName);
+
+  // ① 找出所有「頁首標題」列 → 每一頁的起點
+  const lastRow = sh.getLastRow();
+  const aVals = sh.getRange(1, 1, lastRow, 1).getValues();
+  const pages = [];
+  aVals.forEach(function (r, i) {
+    if (String(r[0] || '').indexOf('保養檢查照片') >= 0) pages.push(i + 1);
+  });
+  if (pages.length === 0) throw new Error('找不到任何頁首標題，無法定位頁面');
+
+  // ② 讀第 1 頁的列高當黃金標準
+  const span = (pages.length > 1) ? (pages[1] - pages[0]) : 39;
+  const goldenTop = pages[0];
+  const heights = [];
+  for (let k = 0; k < span; k++) heights.push(sh.getRowHeight(goldenTop + k));
+
+  // 壓縮成「連續同高度」的區段，減少 API 呼叫次數
+  const runs = [];
+  let s = 0;
+  for (let k = 1; k <= span; k++) {
+    if (k === span || heights[k] !== heights[s]) {
+      runs.push({ off: s, n: k - s, h: heights[s] });
+      s = k;
+    }
+  }
+
+  // ③ 欄寬 A~D 對齊第 1 頁（欄寬是整張表共用，設一次即可）
+  const w = sh.getColumnWidth(1);
+  sh.setColumnWidths(1, BOX_COLS, w);
+
+  // ④ 逐頁套用列高（跳過第 1 頁，它本身就是標準）
+  let done = 0, skipped = 0;
+  const start = Math.max(2, fromPage);
+  const end = Math.min(pages.length, toPage);
+  for (let p = start - 1; p < end; p++) {
+    const top = pages[p];
+    // 本頁可用列數：不可越界到下一頁，也不可超過工作表總列數
+    const limit = (p + 1 < pages.length) ? (pages[p + 1] - top) : (sh.getMaxRows() - top + 1);
+    if (limit < span) { skipped++; }   // 版面不同的特殊頁，跳過不動
+    const usable = Math.min(span, limit);
+    runs.forEach(function (r) {
+      if (r.off < usable) {
+        sh.setRowHeights(top + r.off, Math.min(r.n, usable - r.off), r.h);
+      }
+    });
+    done++;
+    if (done % 50 === 0) console.log('[normalizeLayout] 已處理 ' + done + ' 頁…');
+  }
+
+  SpreadsheetApp.flush();
+  const msg = '【版面統一完成】' + tabName +
+    '\n總頁數：' + pages.length + '（本次處理第 ' + start + '～' + end + ' 頁）' +
+    '\n每頁列數：' + span + ' 列，列高區段 ' + runs.length + ' 段' +
+    '\n第 1 頁列高樣板：' + runs.map(function (r) { return r.n + '列×' + r.h + 'px'; }).join('、') +
+    '\n欄寬 A~D 統一為 ' + w + 'px' +
+    '\n完成 ' + done + ' 頁' + (skipped ? '（其中 ' + skipped + ' 頁版面較短，僅部分套用）' : '') +
+    '\n耗時 ' + Math.round((Date.now() - t0) / 1000) + ' 秒';
+  console.log(msg);
+  return msg;
+}
+
 /** 診斷用：在 Apps Script 執行這個，看看試算表能不能開 */
 function diagTest() {
   try {
