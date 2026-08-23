@@ -570,6 +570,73 @@ function validateJpegBytes_(bytes) {
   return null;
 }
 
+/**
+ * ★一鍵清空「模板」分頁的照片，並還原標題與日期★
+ * 用途：把某個月份分頁升級成新模板後，用這個把該月的照片、日期、
+ *      標題年月洗乾淨，避免內容被複製到未來每一個月。
+ * 執行方式：GAS 編輯器上方函式下拉選單選 clearTemplatePhotos → 按執行
+ *          （這是手動工具，不需要重新部署）
+ */
+function clearTemplatePhotos() {
+  const ss = SpreadsheetApp.openById(MASTER_SHEET_ID);
+  const sh = ss.getSheetByName(TEMPLATE_TAB_NAME);
+  if (!sh) throw new Error('找不到「' + TEMPLATE_TAB_NAME + '」分頁');
+
+  const log = [];
+
+  // ① 移除浮動圖片（舊版 insertImage 殘留物）
+  let imgN = 0;
+  try {
+    sh.getImages().forEach(function (im) { im.remove(); imgN++; });
+  } catch (e) { log.push('浮動圖片略過：' + e.message); }
+  log.push('移除浮動圖片 ' + imgN + ' 張');
+
+  // ② 只清「A~D 合併且高度 ≥5 列」的照片格，補回「照片」佔位字
+  //    ⚠ 絕不整欄 clearContent：A 欄同時放著 229 個頁首大標題，整欄清會全毀
+  const boxes = [];
+  sh.getDataRange().getMergedRanges().forEach(function (mr) {
+    if (mr.getColumn() === 1 && mr.getLastColumn() === 4 && mr.getNumRows() >= 5) {
+      boxes.push(mr.getA1Notation());
+    }
+  });
+  if (boxes.length > 0) {
+    const rl = sh.getRangeList(boxes);
+    rl.clearContent();                    // 清掉 CellImage 與 =IMAGE 公式，保留框線背景
+    rl.setValue('照片')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
+      .setFontWeight('bold')
+      .setFontSize(28);
+  }
+  log.push('清空照片格 ' + boxes.length + ' 個並補回「照片」');
+
+  // ③ 日期還原成 115/05/07
+  //    選單按鈕.gs 用 regex「115/05/\d{2}」批次換日期，模板若留著其他月份會失效
+  const d1 = sh.createTextFinder('施工日期.*').useRegularExpression(true)
+               .replaceAllWith('施工日期:115/05/07');
+  const d2 = sh.createTextFinder('完工日期.*').useRegularExpression(true)
+               .replaceAllWith('完工日期:115/05/07');
+  log.push('重置日期：施工 ' + d1 + ' 格、完工 ' + d2 + ' 格');
+
+  // ④ 標題年月還原成 TEMPLATE_OLD_YM_TEXT，後端建立新分頁時才找得到並替換
+  //    （把常見的月份都掃一遍，模板來自哪個月都能還原）
+  let tN = 0;
+  for (let m = 1; m <= 12; m++) {
+    const s = '115年' + m + '月';
+    if (s === TEMPLATE_OLD_YM_TEXT) continue;
+    tN += sh.createTextFinder(s).replaceAllWith(TEMPLATE_OLD_YM_TEXT);
+  }
+  log.push('標題年月還原為 ' + TEMPLATE_OLD_YM_TEXT + '（' + tN + ' 處）');
+
+  // ⑤ 重建 Z 欄定位鍵
+  log.push('Z 欄：' + rebuildZColumnFor_(sh));
+
+  SpreadsheetApp.flush();
+  const msg = '【模板清理完成】\n' + log.join('\n');
+  console.log(msg);
+  return msg;
+}
+
 /** 診斷用：在 Apps Script 執行這個，看看試算表能不能開 */
 function diagTest() {
   try {
