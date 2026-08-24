@@ -267,7 +267,7 @@ canvas{display:none}
       <b>佑發 · 保養拍照</b>
       <span>高速公路局北區養護工程分局</span>
     </div>
-    <div class="ver">v10</div>
+    <div class="ver">v11</div>
   </div>
 
   <!-- 步驟指示：讓師傅隨時知道進行到哪 -->
@@ -412,6 +412,32 @@ function markFilled(el) {
 }
 
 /* ============================================================
+ * ★v11★ 設備下拉排序：依保養動線 AHU → ACU → CHU → CTR → ACP → 其他
+ * 背景：MENU_TREE 的鍵順序沿用母版「報表頁面」排列，設備會交錯出現
+ *      （泰控機房 47 台裡 AHU 與 ACP 一台一台夾雜，「其他」還卡在中間）。
+ * 做法：只在「顯示時」重新排序，完全不動 MENU_TREE 與 desc 定位鍵，
+ *      對後端、母版、稽核函式零影響。
+ * ============================================================ */
+const EQUIP_ORDER = ['AHU', 'ACU', 'CHU', 'CTR', 'ACP'];
+
+function sortEquipKeys(keys) {
+  return keys.slice().sort(function (a, b) {
+    const pa = a.match(/^([A-Za-z]+)-?(\d+)?/);
+    const pb = b.match(/^([A-Za-z]+)-?(\d+)?/);
+    if (!pa && !pb) return a.localeCompare(b, 'zh-Hant');
+    if (!pa) return 1;          // 「其他」這類非代號一律排最後
+    if (!pb) return -1;
+    const ia = EQUIP_ORDER.indexOf(pa[1].toUpperCase());
+    const ib = EQUIP_ORDER.indexOf(pb[1].toUpperCase());
+    const ra = (ia < 0) ? 99 : ia;   // 不在清單內的代號排在已知類別之後
+    const rb = (ib < 0) ? 99 : ib;
+    if (ra !== rb) return ra - rb;                        // 先比設備類別
+    if (pa[1] !== pb[1]) return pa[1].localeCompare(pb[1]);
+    return (+(pa[2] || 0)) - (+(pb[2] || 0));             // 再比編號（數值比較，非字串）
+  });
+}
+
+/* ============================================================
  * 民國年月
  * ★改為「函式」而非頁面載入時算一次：
  *   外場常常一頁開整天，跨到隔月（例如 8/31 晚上開著放到 9/1）
@@ -534,7 +560,7 @@ $('room').onchange = e => {
   $('item').disabled = true;
   const roomData = e.target.value ? MENU[e.target.value] : null;
   if (roomData && typeof roomData === 'object') {
-    Object.keys(roomData).forEach(k => eq.add(new Option(k, k)));
+    sortEquipKeys(Object.keys(roomData)).forEach(k => eq.add(new Option(k, k)));
     eq.disabled = false;
   } else {
     if (e.target.value) {
