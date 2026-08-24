@@ -2,105 +2,375 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16305C">
 <style>
+/* ============================================================
+ * v10 視覺系統
+ * 設計取向：工程現場工具，不是消費型 App
+ *   ① 高對比 —— 機房光線差、戶外強光下都要看得清
+ *   ② 大觸控區 —— 主要按鈕 ≥60px，戴手套也按得到
+ *   ③ 步驟明確 —— 師傅隨時知道自己在第幾步、還差什麼
+ *   ④ 數據可讀 —— 技術資訊用等寬數字，不會跳動
+ * 深色模式：機房夜間作業自動套用，不刺眼
+ * ============================================================ */
+:root{
+  /* 品牌 */
+  --navy:        #1B3A6B;
+  --navy-deep:   #16305C;
+  --navy-soft:   #2C5490;
+  /* 工程安全色（高速公路意象），用於步驟指示與焦點 */
+  --amber:       #C2710C;
+  --amber-soft:  #FEF3E2;
+  /* 語意色 */
+  --ok:          #15803D;
+  --ok-soft:     #E9F6EE;
+  --err:         #B3261E;
+  --err-soft:    #FDECEA;
+  /* 介面 */
+  --bg:          #F1F4F8;
+  --card:        #FFFFFF;
+  --line:        #DDE3EC;
+  --line-strong: #C3CCDA;
+  --ink:         #0E1726;
+  --ink-mid:     #40506A;
+  --sub:         #6B7A93;
+  --disabled-bg: #E4E9F0;
+  --disabled-ink:#9AA6B8;
+  --shadow-sm:   0 1px 2px rgba(16,32,64,.06);
+  --shadow-md:   0 2px 8px rgba(16,32,64,.08);
+  --shadow-lg:   0 8px 24px rgba(16,32,64,.12);
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
+}
+@media (prefers-color-scheme: dark){
   :root{
-    --navy:#1F3864; --line:#d8dde6;
-    --bg:#f5f6f8; --card:#ffffff; --ink:#1a2233; --sub:#6b7686;
-    --ok:#1a7f4b; --warn:#b5480f;
+    --navy:#3E6BB0; --navy-deep:#16305C; --navy-soft:#5583C4;
+    --amber:#E39A3C; --amber-soft:#38290F;
+    --ok:#4ADE80; --ok-soft:#12301E;
+    --err:#F87171; --err-soft:#331616;
+    --bg:#0B121F; --card:#141E31; --line:#26334A; --line-strong:#39485F;
+    --ink:#E8EDF5; --ink-mid:#B4C0D2; --sub:#8494AC;
+    --disabled-bg:#1D2739; --disabled-ink:#5A6880;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 2px 8px rgba(0,0,0,.45);
+    --shadow-lg:0 8px 24px rgba(0,0,0,.55);
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
-    background:var(--bg);color:var(--ink);font-size:17px;line-height:1.5}
-  header{background:var(--navy);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:5}
-  header b{font-size:19px}
-  header span{display:block;font-size:12px;opacity:.7;margin-top:2px}
-  .wrap{padding:16px 16px 40px;max-width:520px;margin:0 auto}
-  label{display:block;font-size:13px;color:var(--sub);margin:16px 2px 6px;font-weight:600}
-  select{width:100%;padding:15px 14px;font-size:18px;border:1.5px solid var(--line);
-    border-radius:12px;background:var(--card);color:var(--ink);appearance:none;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%236b7686' stroke-width='2'><path d='M5 8l5 5 5-5'/></svg>");
-    background-repeat:no-repeat;background-position:right 14px center}
-  select:disabled{opacity:.45}
-  .slot{background:#eef1f6;border-radius:10px;padding:12px 14px;margin-top:20px;font-size:14px;color:var(--navy)}
-  .slot b{font-size:16px}
-  .shoot{margin-top:24px;display:flex;flex-direction:column;gap:10px}
-  .cambtn,.selbtn{width:100%;padding:18px;font-size:18px;font-weight:700;border:none;border-radius:14px;
-    display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
-  .cambtn{background:var(--navy);color:#fff}
-  .selbtn{background:#fff;color:var(--navy);border:2px solid var(--navy)}
-  .cambtn:disabled,.selbtn:disabled{background:#aeb6c2;border-color:#aeb6c2;color:#fff}
-  #preview{margin-top:18px;display:none}
-  #preview img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
-  .upbtn{width:100%;margin-top:14px;padding:18px;font-size:19px;font-weight:700;border:none;
-    border-radius:14px;background:var(--ok);color:#fff}
-  .upbtn:disabled{background:#aeb6c2}
-  .retake{width:100%;margin-top:10px;padding:14px;font-size:16px;border:1.5px solid var(--line);
-    border-radius:12px;background:var(--card);color:var(--sub)}
-  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
-    background:var(--ink);color:#fff;padding:13px 22px;border-radius:30px;font-size:15px;
-    opacity:0;transition:.25s;pointer-events:none;max-width:88%;text-align:center}
-  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-  #toast.ok{background:var(--ok)} #toast.err{background:var(--warn)}
-  .count{font-size:13px;color:var(--sub);margin-top:8px;text-align:center}
-  canvas{display:none}
-  .note{font-size:12px;color:var(--sub);text-align:center;margin-top:6px}
-  .cropinfo{font-size:12px;text-align:center;margin-top:8px;padding:6px 10px;
-    border-radius:8px;background:#e6f4ec;color:var(--ok);font-weight:600}
-  .cropinfo.bad{background:#fdeee6;color:var(--warn)}
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  background:var(--bg);color:var(--ink);
+  font-size:17px;line-height:1.55;
+  /* 底部留白，避免最後一顆按鈕被手機手勢列蓋住 */
+  padding-bottom:env(safe-area-inset-bottom);
+}
+
+/* ---------- 頁首 ---------- */
+header{
+  background:linear-gradient(160deg,var(--navy-deep) 0%,var(--navy) 100%);
+  color:#fff;position:sticky;top:0;z-index:20;
+  padding:calc(14px + env(safe-area-inset-top)) 18px 14px;
+  box-shadow:var(--shadow-md);
+}
+.brand{display:flex;align-items:center;gap:11px}
+.mark{
+  width:38px;height:38px;flex:none;border-radius:10px;
+  background:rgba(255,255,255,.13);
+  border:1px solid rgba(255,255,255,.22);
+  display:flex;align-items:center;justify-content:center;
+  font-size:19px;font-weight:800;letter-spacing:.5px;
+}
+.brand-txt{min-width:0}
+.brand-txt b{display:block;font-size:18px;font-weight:750;letter-spacing:.4px;line-height:1.25}
+.brand-txt span{
+  display:block;font-size:11.5px;opacity:.72;margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ver{
+  margin-left:auto;flex:none;align-self:flex-start;
+  font-size:10.5px;font-weight:600;letter-spacing:.3px;
+  padding:3px 8px;border-radius:20px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);
+}
+
+/* ---------- 步驟指示 ---------- */
+.steps{display:flex;align-items:flex-start;margin-top:14px;padding:0 2px}
+.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;position:relative}
+.step::before{         /* 連接線 */
+  content:'';position:absolute;top:12px;left:-50%;width:100%;height:2px;
+  background:rgba(255,255,255,.2);
+}
+.step:first-child::before{display:none}
+.dot{
+  width:25px;height:25px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;font-weight:700;position:relative;z-index:1;
+  background:rgba(255,255,255,.16);color:rgba(255,255,255,.6);
+  border:1.5px solid transparent;transition:.22s;
+}
+.step-t{font-size:11px;opacity:.6;letter-spacing:.2px;transition:.22s}
+.step.on .dot{background:#fff;color:var(--navy-deep);transform:scale(1.06)}
+.step.on .step-t{opacity:1;font-weight:650}
+.step.done .dot{background:rgba(255,255,255,.9);color:var(--navy-deep)}
+.step.done .step-t{opacity:.85}
+
+/* ---------- 版面 ---------- */
+.wrap{padding:16px 16px 44px;max-width:560px;margin:0 auto}
+
+/* ---------- 卡片 ---------- */
+.card{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:16px 15px;margin-bottom:14px;
+  box-shadow:var(--shadow-sm);
+}
+.card-h{
+  display:flex;align-items:center;gap:8px;
+  margin:-2px 0 13px;padding-bottom:11px;border-bottom:1px solid var(--line);
+}
+.card-n{
+  width:22px;height:22px;flex:none;border-radius:6px;
+  background:var(--navy);color:#fff;
+  font-size:12px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+.card-h h2{margin:0;font-size:14.5px;font-weight:700;letter-spacing:.3px;color:var(--ink)}
+
+/* ---------- 表單 ---------- */
+.field{margin-bottom:13px}
+.field:last-child{margin-bottom:0}
+label{
+  display:block;font-size:12px;font-weight:700;letter-spacing:.6px;
+  color:var(--sub);margin:0 0 6px 2px;text-transform:none;
+}
+select{
+  width:100%;padding:15px 42px 15px 14px;font-size:17px;font-weight:500;
+  border:1.5px solid var(--line-strong);border-radius:var(--r-md);
+  background-color:var(--card);color:var(--ink);
+  appearance:none;font-family:inherit;transition:.16s;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='none' stroke='%236B7A93' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l5 5 5-5'/></svg>");
+  background-repeat:no-repeat;background-position:right 12px center;
+}
+select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,58,107,.13)}
+select:disabled{
+  background-color:var(--disabled-bg);color:var(--disabled-ink);
+  border-color:var(--line);cursor:not-allowed;
+}
+select.filled{border-color:var(--navy-soft);font-weight:600}
+
+/* ---------- 即將拍攝確認條 ---------- */
+.slot{
+  display:none;margin-bottom:14px;
+  background:var(--amber-soft);border:1px solid rgba(194,113,12,.28);
+  border-left:4px solid var(--amber);
+  border-radius:var(--r-md);padding:12px 14px;
+}
+.slot-l{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--amber);
+  margin-bottom:4px;
+}
+.slot b{display:block;font-size:16px;font-weight:700;line-height:1.4;color:var(--ink)}
+
+/* ---------- 按鈕 ---------- */
+.btn{
+  width:100%;min-height:60px;padding:16px;
+  font-family:inherit;font-size:17.5px;font-weight:700;letter-spacing:.4px;
+  border:none;border-radius:var(--r-md);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  transition:transform .1s,box-shadow .16s,background .16s;
+}
+.btn:active:not(:disabled){transform:scale(.985)}
+.btn svg{flex:none}
+.btn-primary{background:var(--navy);color:#fff;box-shadow:var(--shadow-md)}
+.btn-primary:active:not(:disabled){background:var(--navy-deep)}
+.btn-outline{
+  background:var(--card);color:var(--navy);
+  border:2px solid var(--navy);box-shadow:var(--shadow-sm);
+}
+.btn-go{background:var(--ok);color:#fff;font-size:18.5px;box-shadow:var(--shadow-md)}
+.btn-quiet{
+  min-height:50px;font-size:15.5px;font-weight:600;
+  background:transparent;color:var(--sub);border:1.5px solid var(--line-strong);
+  box-shadow:none;
+}
+.btn:disabled{
+  background:var(--disabled-bg)!important;color:var(--disabled-ink)!important;
+  border-color:var(--disabled-bg)!important;box-shadow:none!important;cursor:not-allowed;
+}
+.stack{display:flex;flex-direction:column;gap:10px}
+.hint{
+  font-size:12px;color:var(--sub);text-align:center;
+  margin-top:10px;line-height:1.5;
+}
+
+/* ---------- 預覽 ---------- */
+#preview{display:none}
+.shot{
+  position:relative;border-radius:var(--r-md);overflow:hidden;
+  border:1px solid var(--line-strong);background:#fff;margin-bottom:11px;
+}
+#preview img{width:100%;display:block}
+.chips{display:flex;flex-direction:column;gap:7px;margin-bottom:13px}
+.chip{
+  font-size:12px;font-weight:600;line-height:1.5;
+  padding:8px 11px;border-radius:var(--r-sm);
+  display:flex;align-items:flex-start;gap:7px;
+}
+.cropinfo{background:var(--ok-soft);color:var(--ok);border:1px solid rgba(21,128,61,.2)}
+.cropinfo.bad{background:var(--err-soft);color:var(--err);border-color:rgba(179,38,30,.25)}
+#shotInfo{
+  display:none;background:var(--bg);color:var(--ink-mid);
+  border:1px solid var(--line);
+}
+
+/* ---------- 計數 ---------- */
+.count{
+  display:none;margin-top:16px;text-align:center;
+  font-size:13px;font-weight:600;color:var(--sub);
+  font-variant-numeric:tabular-nums;
+}
+.count.show{display:block}
+
+/* ---------- Toast ---------- */
+#toast{
+  position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));
+  transform:translateX(-50%) translateY(22px);
+  background:var(--ink);color:#fff;
+  padding:14px 20px;border-radius:14px;
+  font-size:14.5px;font-weight:600;line-height:1.5;
+  opacity:0;transition:.26s cubic-bezier(.2,.8,.3,1);
+  pointer-events:none;max-width:min(88%,460px);text-align:left;
+  box-shadow:var(--shadow-lg);z-index:60;
+  word-break:break-word;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:var(--ok)}
+#toast.err{background:var(--err)}
+
+canvas{display:none}
+
+/* 寬螢幕：維持單欄手機版型（現場用），但加點呼吸感 */
+@media (min-width:640px){
+  .wrap{padding-top:22px}
+}
 </style>
 </head>
 <body>
+
 <header>
-  <b>佑發 · 保養拍照</b>
-  <span>高速公路局 · 選好位置直接拍，自動歸檔　<b style="opacity:.55">v7 等比縮放補白邊</b></span>
+  <div class="brand">
+    <div class="mark">佑</div>
+    <div class="brand-txt">
+      <b>佑發 · 保養拍照</b>
+      <span>高速公路局北區養護工程分局</span>
+    </div>
+    <div class="ver">v10</div>
+  </div>
+
+  <!-- 步驟指示：讓師傅隨時知道進行到哪 -->
+  <div class="steps" id="steps">
+    <div class="step on" id="st1"><div class="dot">1</div><div class="step-t">選位置</div></div>
+    <div class="step"    id="st2"><div class="dot">2</div><div class="step-t">拍照</div></div>
+    <div class="step"    id="st3"><div class="dot">3</div><div class="step-t">上傳</div></div>
+  </div>
 </header>
 
 <div class="wrap">
-  <label>機房</label>
-  <select id="room"><option value="">選單載入中…</option></select>
 
-  <label>設備編號</label>
-  <select id="equip" disabled><option value="">先選機房</option></select>
+  <!-- ① 選擇拍攝位置 -->
+  <section class="card">
+    <div class="card-h">
+      <div class="card-n">1</div>
+      <h2>選擇拍攝位置</h2>
+    </div>
 
-  <label>檢查項目</label>
-  <select id="item" disabled><option value="">先選設備</option></select>
+    <div class="field">
+      <label for="room">機房</label>
+      <select id="room"><option value="">選單載入中…</option></select>
+    </div>
 
-  <div class="slot" id="slotBox" style="display:none">
-    即將拍攝：<b id="slotText"></b>
+    <div class="field">
+      <label for="equip">設備編號</label>
+      <select id="equip" disabled><option value="">先選機房</option></select>
+    </div>
+
+    <div class="field">
+      <label for="item">檢查項目</label>
+      <select id="item" disabled><option value="">先選設備</option></select>
+    </div>
+  </section>
+
+  <!-- 即將拍攝確認 -->
+  <div class="slot" id="slotBox">
+    <div class="slot-l">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      即將拍攝
+    </div>
+    <b id="slotText"></b>
   </div>
 
-  <div class="shoot">
-    <!-- 直接開相機 -->
-    <button class="cambtn" id="camBtn" disabled>
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>
-      </svg>
-      直接拍照
-    </button>
-    <!-- 從相簿選（時間相機 App 拍好的）-->
-    <button class="selbtn" id="selBtn" disabled>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-        <path d="M21 15l-5-5L5 21"/>
-      </svg>
-      從相簿選擇
-    </button>
-    <div class="note">使用時間相機 App 拍好後，點「從相簿選擇」</div>
-  </div>
+  <!-- ② 拍攝 -->
+  <section class="card">
+    <div class="card-h">
+      <div class="card-n">2</div>
+      <h2>拍攝照片</h2>
+    </div>
+
+    <div class="stack">
+      <button class="btn btn-primary" id="camBtn" disabled>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>
+        </svg>
+        直接拍照
+      </button>
+
+      <button class="btn btn-outline" id="selBtn" disabled>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        從相簿選擇
+      </button>
+    </div>
+
+    <div class="hint">使用「時間相機 App」拍好後，<br>點『從相簿選擇』即可保留浮水印</div>
+  </section>
 
   <!-- 相機 input（capture=environment 強制後鏡頭） -->
   <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
   <!-- 相簿 input（不加 capture，讓使用者選相簿） -->
   <input type="file" id="galInput" accept="image/*" style="display:none">
 
+  <!-- ③ 確認並上傳 -->
   <div id="preview">
-    <img id="previewImg" alt="預覽">
-    <div class="cropinfo" id="cropInfo"></div>
-    <div class="note" id="shotInfo" style="display:none"></div>
-    <button class="upbtn" id="upBtn">上傳並歸檔</button>
-    <button class="retake" id="retakeBtn">重新選擇</button>
+    <section class="card">
+      <div class="card-h">
+        <div class="card-n">3</div>
+        <h2>確認並上傳</h2>
+      </div>
+
+      <div class="shot"><img id="previewImg" alt="照片預覽"></div>
+
+      <div class="chips">
+        <div class="chip cropinfo" id="cropInfo"></div>
+        <div class="chip" id="shotInfo"></div>
+      </div>
+
+      <div class="stack">
+        <button class="btn btn-go" id="upBtn">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>
+          </svg>
+          上傳並歸檔
+        </button>
+        <button class="btn btn-quiet" id="retakeBtn">重新選擇照片</button>
+      </div>
+    </section>
   </div>
+
   <div class="count" id="count"></div>
 </div>
 
@@ -120,6 +390,26 @@ const MENU_RETRY  = 3;         // 選單載入失敗時的自動重試次數
 let MENU = {}, uploadedCount = 0, currentDataUrl = null;
 let currentShotYmd = null;   // ★v6★ 照片 EXIF 拍攝日（YYYY-MM-DD），讀不到為 null
 const $ = id => document.getElementById(id);
+
+/* ============================================================
+ * ★v10★ 步驟指示器
+ * 純視覺輔助，不影響任何既有邏輯：依「目前狀態」推導在第幾步。
+ *   1 = 位置還沒選齊  2 = 選好了，等拍照  3 = 照片已就緒，等上傳
+ * ============================================================ */
+function updateStepper() {
+  const ready   = !!($('room').value && $('equip').value && $('item').value);
+  const hasShot = !!currentDataUrl;
+  const now = hasShot ? 3 : (ready ? 2 : 1);
+  [1, 2, 3].forEach(n => {
+    const el = $('st' + n);
+    el.className = 'step' + (n === now ? ' on' : (n < now ? ' done' : ''));
+  });
+}
+
+/* 下拉選單已選取時給予視覺回饋（加粗＋邊框變色） */
+function markFilled(el) {
+  el.classList.toggle('filled', !!el.value);
+}
 
 /* ============================================================
  * 民國年月
@@ -188,9 +478,9 @@ function ymFromYmd(ymd) {
 }
 function updateShotInfo() {
   const el = $('shotInfo');
-  el.style.display = 'block';
+  el.style.display = 'flex';
   el.textContent = currentShotYmd
-    ? '📅 拍攝日期：' + rocFromYmd(currentShotYmd) + '（日期與月份歸檔以此為準）'
+    ? '📅 拍攝日期 ' + rocFromYmd(currentShotYmd) + '　日期與月份歸檔以此為準'
     : '📅 讀不到拍攝日期，將以「上傳當天」為準';
 }
 
@@ -206,7 +496,7 @@ function loadMenu(attempt) {
     .withSuccessHandler(m => {
       try {
         if (!m || typeof m !== 'object' || Object.keys(m).length === 0) {
-          throw new Error('後端回傳的選單是空的，請檢查 blank_master 選單來源分頁');
+          throw new Error('後端回傳的選單是空的，請檢查母版選單來源');
         }
         MENU = m;
         const r = $('room');
@@ -253,6 +543,7 @@ $('room').onchange = e => {
     }
     eq.disabled = true;
   }
+  markFilled(e.target); markFilled(eq); markFilled($('item'));
   refreshSlot();
 };
 
@@ -271,9 +562,10 @@ $('equip').onchange = e => {
     }
     it.disabled = true;
   }
+  markFilled(e.target); markFilled(it);
   refreshSlot();
 };
-$('item').onchange = refreshSlot;
+$('item').onchange = e => { markFilled(e.target); refreshSlot(); };
 
 function refreshSlot() {
   const r = $('room').value, e = $('equip').value, i = $('item').value;
@@ -282,6 +574,7 @@ function refreshSlot() {
   $('selBtn').disabled = !ready;
   $('slotBox').style.display = ready ? 'block' : 'none';
   if (ready) $('slotText').textContent = r + ' · ' + i;
+  updateStepper();
 }
 
 /* ============================================================
@@ -296,6 +589,7 @@ $('retakeBtn').onclick = () => {
   $('shotInfo').style.display = 'none';
   currentDataUrl = null;
   currentShotYmd = null;
+  updateStepper();
 };
 
 // 兩個 input 都走同一個處理流程
@@ -386,6 +680,7 @@ function compress(src, done) {
       currentDataUrl = cv.toDataURL('image/jpeg', JPEG_Q);
       $('previewImg').src = currentDataUrl;
       $('preview').style.display = 'block';
+      updateStepper();
 
       // 白邊方向與厚度（僅供顯示，讓現場確認畫面完整）
       const padSide = (dy > dx) ? '上下' : (dx > 0 ? '左右' : '無');
@@ -400,12 +695,11 @@ function compress(src, done) {
       const diff = Math.abs(outRatio - BOX_RATIO);
       const info = $('cropInfo');
       if (diff < 0.01) {
-        info.className = 'cropinfo';
-        info.textContent = '✓ 等比縮放補白邊 ' + outW + '×' + outH +
-          '（原圖完整保留，浮水印未裁切；白邊：' +
-          (padSide === '無' ? '無' : padSide + ' ' + padPx + 'px') + '）';
+        info.className = 'chip cropinfo';
+        info.textContent = '✓ 原圖完整保留，浮水印未裁切　' + outW + '×' + outH +
+          '　白邊 ' + (padSide === '無' ? '無' : padSide + ' ' + padPx + 'px');
       } else {
-        info.className = 'cropinfo bad';
+        info.className = 'chip cropinfo bad';
         info.textContent = '⚠ 比例不符 ' + outRatio.toFixed(3) +
           '（應為 ' + BOX_RATIO.toFixed(3) + '）→ 版本未更新，請重新部署';
       }
@@ -428,11 +722,10 @@ function compress(src, done) {
 
 /* ============================================================
  * 上傳
- * 新增：
  * ① res 結構防呆（後端若回傳非預期格式不會讓前端炸掉）
  * ② withFailureHandler 記錄實際錯誤內容（舊版只顯示「連線失敗」，
  *    看不出是逾時、權限還是後端 throw，之後查 log 就有依據）
- * ③ ym 改為上傳當下計算（見 nowYm 說明）
+ * ③ ym 依拍攝日優先（見 nowYm / ymFromYmd 說明）
  * ============================================================ */
 $('upBtn').onclick = () => {
   if (!currentDataUrl) return;
@@ -463,10 +756,14 @@ $('upBtn').onclick = () => {
         console.log('[upload] 成功：' + res.name + '（第 ' + uploadedCount + ' 張）');
         toast('已歸檔：' + res.name + ' | ' + (res.where || ''), 'ok');
         $('preview').style.display = 'none';
+        $('shotInfo').style.display = 'none';
         currentDataUrl = null;
+        currentShotYmd = null;
         $('camInput').value = '';
         $('galInput').value = '';
         $('count').textContent = '本次已上傳 ' + uploadedCount + ' 張';
+        $('count').classList.add('show');
+        updateStepper();
       } else {
         const msg = (res && res.error) ? res.error : '後端回傳格式異常';
         console.error('[upload] 後端回報失敗：', res);
