@@ -839,6 +839,136 @@ function auditMenuVsMaster() {
   return msg;
 }
 
+/**
+ * ★v4.7★ 唯讀診斷：逐一檢查「模板 + 每一個月份分頁」是否還跟得上目前的選單。
+ *
+ * 為什麼需要這個？
+ *   月份分頁是「複製當下」的模板快照，定位鍵完全由該分頁自己的 F 欄文字推導
+ *   （見 rebuildZColumnFor_）。模板後來改了欄位文字，舊分頁不會跟著變，
+ *   而且「重建 Z 欄」也救不回來 —— 它只能重寫既有文字，無法無中生有。
+ *   uploadPhoto 的自我修復只在「同鍵重複」時觸發；「找不到鍵」時直接失敗，
+ *   現場師傅會當場卡住。auditMenuVsMaster 只看模板，看不出這件事。
+ *
+ * 完全唯讀：不 setValue、不 setFormula、不改任何格式，執行再多次都安全。
+ * 掃描對象與 rebuildZColumnEverywhere 同一條規則（模板 + 純 6 位數分頁），
+ * 因此像「202608備份」這種手動改名的備份分頁一律不會被列入。
+ */
+function auditAllMonthTabs() {
+  const ss = SpreadsheetApp.openById(MASTER_SHEET_ID);
+
+  // ① 先把選單攤平成「定位鍵 → 顯示路徑」，全部分頁共用同一份
+  const menu = {};
+  let menuCount = 0;
+  Object.keys(MENU_TREE).forEach(function (r) {
+    Object.keys(MENU_TREE[r]).forEach(function (eq) {
+      MENU_TREE[r][eq].forEach(function (it) {
+        menuCount++;
+        const k = r + '__' + it.desc;
+        if (!menu[k]) menu[k] = r + ' / ' + eq + ' / ' + it.label;
+      });
+    });
+  });
+
+  const out = [];
+  out.push('══════ 全分頁健檢（唯讀）══════');
+  out.push('選單目前共 ' + menuCount + ' 項');
+
+  let bad = 0, scanned = 0;
+
+  ss.getSheets().forEach(function (sh) {
+    const name = sh.getName();
+    // 與 rebuildZColumnEverywhere 完全相同的篩選：只碰模板與年月分頁
+    if (name !== TEMPLATE_TAB_NAME && !/^\d{6}$/.test(name)) return;
+    scanned++;
+
+    const lastRow = sh.getLastRow();
+
+    // ② 用與 rebuildZColumnFor_ 一模一樣的規則，推導這個分頁真實的槽位
+    const F = sh.getRange(1, 6, lastRow, 1).getValues().map(function (r) {
+      return String(r[0] || '').trim();
+    });
+    const slots = {};          // 定位鍵 → 照片格起始列陣列
+    let room = '', psr = -1, slotTotal = 0;
+    for (let i = 0; i < F.length; i++) {
+      const f = F[i];
+      if (f.indexOf('保養檢查項目') === 0) psr = i + 2;
+      if (f.indexOf('機房名稱:') === 0) room = f.replace('機房名稱:', '').trim();
+      if (f.indexOf('照片內容說明:') === 0 && room && psr > 0) {
+        let d = f.replace('照片內容說明:', '').trim();
+        const n = String(F[i + 1] || '').trim();
+        if (n && n.indexOf('施工') !== 0 && n.indexOf('完工') !== 0 && n.indexOf('機房') !== 0 &&
+            n.indexOf('保養') !== 0 && n.indexOf('照片') !== 0) d += n;
+        const k = room + '__' + d;
+        if (!slots[k]) slots[k] = [];
+        slots[k].push(psr);
+        slotTotal++;
+      }
+    }
+
+    // ③ 數這個分頁已經放了幾張照片（判斷能不能安全刪掉重建）
+    //    沿用既有判斷：CellImage 會是 object，=IMAGE() 公式則看 getFormula
+    let photos = 0;
+    if (lastRow > 0) {
+      const aVals = sh.getRange(1, 1, lastRow, 1).getValues();
+      const aFmls = sh.getRange(1, 1, lastRow, 1).getFormulas();
+      for (let r = 0; r < lastRow; r++) {
+        if (typeof aVals[r][0] === 'object' && aVals[r][0] !== null) photos++;
+        else if (String(aFmls[r][0] || '').indexOf('=IMAGE') === 0) photos++;
+      }
+    }
+
+    // ④ 雙向比對
+    const missing = Object.keys(menu).filter(function (k) { return !slots[k]; });   // 選單有、分頁沒格子 → 上傳會失敗
+    const orphan  = Object.keys(slots).filter(function (k) { return !menu[k]; });   // 分頁有格子、選單選不到 → 永遠空白
+
+    out.push('');
+    out.push('──────────────────────────────');
+    out.push('【' + name + '】槽位 ' + slotTotal + ' 格　已放照片 ' + photos + ' 張');
+
+    if (missing.length === 0 && orphan.length === 0) {
+      out.push('  ✓ 與選單完全對應，可正常使用');
+    } else {
+      bad++;
+      if (missing.length) {
+        // 按機房歸類，現場才看得懂是哪一區出問題
+        const byRoom = {};
+        missing.forEach(function (k) {
+          const r = k.split('__')[0];
+          byRoom[r] = (byRoom[r] || 0) + 1;
+        });
+        out.push('  ✗ 舊模板殘留：' + missing.length + ' 個鍵師傅點了會跳「找不到定位鍵」');
+        Object.keys(byRoom).forEach(function (r) {
+          out.push('      ' + r + '：' + byRoom[r] + ' 項');
+        });
+        missing.slice(0, 10).forEach(function (k) {
+          out.push('      · ' + menu[k] + '  → ' + k);
+        });
+        if (missing.length > 10) out.push('      · …其餘 ' + (missing.length - 10) + ' 項省略');
+      }
+      if (orphan.length) {
+        out.push('  ✗ 分頁有格子、選單選不到：' + orphan.length + ' 個鍵（該格永遠空白）');
+        orphan.slice(0, 10).forEach(function (k) {
+          out.push('      · ' + k + '（列 ' + slots[k].join(', ') + '）');
+        });
+        if (orphan.length > 10) out.push('      · …其餘 ' + (orphan.length - 10) + ' 項省略');
+      }
+      out.push(photos === 0
+        ? '  → 這個分頁還沒有照片，可直接刪除，下次上傳會自動用新模板重建'
+        : '  → ⚠ 已有 ' + photos + ' 張照片，刪掉會一起消失，請先確認要不要保留');
+    }
+  });
+
+  out.push('');
+  out.push('══════════════════════════════');
+  out.push('共檢查 ' + scanned + ' 個分頁：' +
+           (bad === 0 ? '✓ 全部正常' : '✗ ' + bad + ' 個分頁需要處理'));
+  out.push('（手動改名的備份分頁如「202608備份」不在檢查範圍，也不會被任何程式寫入）');
+
+  const msg = out.join('\n');
+  console.log(msg);
+  return msg;
+}
+
 /** 診斷用：在 Apps Script 執行這個，看看試算表能不能開 */
 function diagTest() {
   try {
