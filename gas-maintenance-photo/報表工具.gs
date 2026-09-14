@@ -1,5 +1,5 @@
 /**
- * 佑發 · 高公局保養報表 — PDF 匯出器
+ * 佑發 · 高公局保養報表 — PDF 匯出指引
  * =================================================================
  * ★安裝位置★ 試算表的「內嵌指令碼」：
  *   開啟試算表 → 擴充功能 → Apps Script → 新增檔案，貼上本檔內容
@@ -17,7 +17,19 @@
  *           .addToUi();
  *     }
  *
- * 功能：直式 A4、符合頁寬、無格線、不印分頁名稱，蓋電子印章不跑位。
+ * ★為什麼這個選單不再自己下載 PDF★
+ *   原本是組一個 /export?...&format=pdf 的網址讓瀏覽器下載。那條路走的是
+ *   Google 「伺服器端」的 PDF 服務，和產生列印預覽的 Chrome 是兩套不同的
+ *   排版引擎，實測結果不一致：
+ *     - 預覽正確，下載出來卻把「廠商用印」簽名欄擠到下一張紙
+ *     - 實測 202609：58 張紙有 25 張只剩一行簽名、其餘全白
+ *   而且無法用參數救 —— 「依分頁符號自動調整顯示比例」永遠取它認為塞得下的
+ *   最大比例（縮小邊界時實測 60% → 82% → 84%），餘裕恆為零，只要兩個引擎
+ *   有一點誤差就爆頁。
+ *
+ *   走「檔案 → 列印 → 另存為 PDF」用的是產生正確預覽的同一個 Chrome 引擎，
+ *   輸出與預覽一致。所以這個選單改為引導使用者走那條路。
+ *   ⚠ 不要把 /export 下載網址加回來。
  */
 
 // ===== 匯出範圍設定 =====
@@ -31,77 +43,32 @@ const PDF_LAST_COL  = 'G';
 const PDF_TEMPLATE_TAB = '模板';
 
 /**
- * 一鍵匯出「目前正在觀看的分頁」為直式 A4 PDF
+ * 顯示「如何正確匯出 PDF」指引
  * （選單項目對應的函式名稱，onOpen 裡填 'exportCurrentMonthToPDF'）
  */
 function exportCurrentMonthToPDF() {
   const ui = SpreadsheetApp.getUi();
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sh = ss.getActiveSheet();          // 使用者目前正在看的分頁
+    const sh = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const tabName = sh.getName();
 
-    // ① 防呆：擋下模板分頁（空母版匯出沒有意義，還會誤導行政人員）
+    // 防呆：擋下模板分頁（空母版匯出沒有意義，還會誤導行政人員）
     if (tabName === PDF_TEMPLATE_TAB) {
       ui.alert('無法匯出模板',
                '你目前在「' + PDF_TEMPLATE_TAB + '」分頁。\n\n' +
-               '請先切換至當月分頁（例如 202608）再匯出。',
+               '請先切換至當月分頁（例如 202609）再匯出。',
                ui.ButtonSet.OK);
       return;
     }
 
-    // ② 防呆：分頁沒有任何內容時不匯出
-    const lastRow = sh.getLastRow();
-    if (lastRow < 1) {
-      ui.alert('這個分頁是空的，沒有可匯出的內容。');
-      return;
-    }
-
-    // ③ 組裝匯出網址與參數
-    //
-    // ★不可再加回紙張大小、縮放、邊界參數★
-    //   這些一旦寫死，就會蓋掉試算表自己存的列印設定，包含最關鍵的
-    //   「自訂分頁符號」與它自動算出的縮放比例。實測後果：
-    //     - fitw=true（符合頁寬）會讓自訂分頁符號完全失效
-    //     - size=A4 曾實際匯出成 A5（420×595pt），整份縮水
-    //     - 寫死 0.4 吋邊界會蓋掉使用者調好的上 1cm / 下 0.8cm
-    //   結果是每頁高度差 19pt，廠商用印簽名欄被擠到下一張紙，
-    //   58 張紙有 25 張只剩一行簽名、其餘全空白，送審很難看。
-    //
-    //   正確做法是「什麼都不指定」，讓試算表用自己存好的列印設定
-    //   （A4 縱向、自訂分頁符號 82%、上 1cm 下 0.8cm 左右 1.778cm）。
-    //   要調版面請到 Sheets 的列印預覽裡改，不要改這裡。
-    const gid = sh.getSheetId();
-    const range = PDF_FIRST_COL + '1:' + PDF_LAST_COL + lastRow;   // 只匯出 A~G
-    const params = {
-      exportFormat: 'pdf',
-      format:       'pdf',
-      gid:          gid,       // 只匯出這一個分頁
-      range:        range      // ★只匯出 A~G，排除 Z 欄定位鍵★
-    };
-
-    let url = ss.getUrl().replace(/\/edit.*$/, '') + '/export?';
-    url += Object.keys(params)
-      .map(function (k) { return k + '=' + encodeURIComponent(params[k]); })
-      .join('&');
-
-    console.log('[exportPDF] 分頁=' + tabName + '，gid=' + gid + '，範圍=' + range);
-
-    // ④ 產生下載對話框
-    //    採「瀏覽器直接下載」而非後端抓檔：
-    //    大型報表（7000+ 列含照片）用 UrlFetchApp 會撞到 50MB 限制與執行逾時，
-    //    交給瀏覽器下載則沒有大小與時間限制，且使用者已登入 Google 帳號，權限自然通過。
     const tpl = HtmlService.createTemplateFromFile('下載對話框');
-    tpl.url = url;
     tpl.tabName = tabName;
-    tpl.title = pdfFriendlyTitle_(tabName);
-
-    const html = tpl.evaluate().setWidth(420).setHeight(260);
-    ui.showModalDialog(html, '匯出 PDF 報表');
+    tpl.title   = pdfFriendlyTitle_(tabName);
+    ui.showModalDialog(tpl.evaluate().setWidth(460).setHeight(360), '匯出 PDF 報表');
 
   } catch (err) {
-    console.error('[exportPDF] 失敗：' + err + (err && err.stack ? '\n' + err.stack : ''));
-    ui.alert('匯出失敗', '錯誤訊息：' + err.message, ui.ButtonSet.OK);
+    console.error('[exportPDF] ' + err);
+    ui.alert('開啟指引失敗：' + err.message);
   }
 }
 
