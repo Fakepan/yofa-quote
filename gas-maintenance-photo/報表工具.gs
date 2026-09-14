@@ -57,27 +57,27 @@ function exportCurrentMonthToPDF() {
       return;
     }
 
-    // ③ 組裝匯出網址與參數（全部鎖定，行政人員不必自己調整列印設定）
+    // ③ 組裝匯出網址與參數
+    //
+    // ★不可再加回紙張大小、縮放、邊界參數★
+    //   這些一旦寫死，就會蓋掉試算表自己存的列印設定，包含最關鍵的
+    //   「自訂分頁符號」與它自動算出的縮放比例。實測後果：
+    //     - fitw=true（符合頁寬）會讓自訂分頁符號完全失效
+    //     - size=A4 曾實際匯出成 A5（420×595pt），整份縮水
+    //     - 寫死 0.4 吋邊界會蓋掉使用者調好的上 1cm / 下 0.8cm
+    //   結果是每頁高度差 19pt，廠商用印簽名欄被擠到下一張紙，
+    //   58 張紙有 25 張只剩一行簽名、其餘全空白，送審很難看。
+    //
+    //   正確做法是「什麼都不指定」，讓試算表用自己存好的列印設定
+    //   （A4 縱向、自訂分頁符號 82%、上 1cm 下 0.8cm 左右 1.778cm）。
+    //   要調版面請到 Sheets 的列印預覽裡改，不要改這裡。
     const gid = sh.getSheetId();
     const range = PDF_FIRST_COL + '1:' + PDF_LAST_COL + lastRow;   // 只匯出 A~G
     const params = {
       exportFormat: 'pdf',
       format:       'pdf',
-      size:         'A4',      // A4 紙張
-      portrait:     'true',    // 直式
-      fitw:         'true',    // 欄位縮放符合頁寬
-      gridlines:    'false',   // 不印網格線
-      printtitle:   'false',   // 不印試算表檔名
-      sheetnames:   'false',   // 不印分頁名稱
-      pagenumbers:  'false',   // 不印頁碼（報表本身已有頁首）
-      fzr:          'false',   // 不重複凍結列
       gid:          gid,       // 只匯出這一個分頁
-      range:        range,     // ★只匯出 A~G，排除 Z 欄定位鍵★
-      // 邊界留 0.4 吋：紙張利用率高，同時保留裝訂與蓋章空間
-      top_margin:    '0.4',
-      bottom_margin: '0.4',
-      left_margin:   '0.4',
-      right_margin:  '0.4'
+      range:        range      // ★只匯出 A~G，排除 Z 欄定位鍵★
     };
 
     let url = ss.getUrl().replace(/\/edit.*$/, '') + '/export?';
