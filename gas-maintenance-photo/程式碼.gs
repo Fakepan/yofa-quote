@@ -66,6 +66,18 @@ function getMenu() { return MENU_TREE; }
  */
 function uploadPhoto(p) {
   const t0 = Date.now(); // 計時，方便從執行記錄看每張耗時
+
+  // ★v4.7 階段計時★ 純觀測，不改變任何行為。
+  //   總耗時看不出「5 秒花在哪一段」，要定位瓶頸就得逐段量。
+  //   記錄的是「每段各花多少毫秒」（delta），不是累計值——最大的那個數字就是瓶頸。
+  let tPrev = t0;
+  const lap = [];
+  const mark = function (label) {
+    const now = Date.now();
+    lap.push(label + ':' + (now - tPrev));
+    tPrev = now;
+  };
+
   try {
     // 0. 參數防呆：前端傳來的 payload 缺欄位時，回明確錯誤而不是直接炸掉
     if (!p || !p.room || !p.item || !p.dataUrl) {
@@ -98,6 +110,7 @@ function uploadPhoto(p) {
 
     const blob = Utilities.newBlob(bytes, 'image/jpeg', key + '.jpg');
     console.log('[uploadPhoto] 開始：' + key + '，照片 ' + Math.round(bytes.length / 1024) + ' KB');
+    mark('解碼驗證');
 
     // ★v4.5 A 方案★ 基準日：優先用前端從照片 EXIF 讀出的「拍攝日」(p.shotYmd,
     // 格式 YYYY-MM-DD)；讀不到或格式不合法 → 退回伺服器當下日期。
@@ -128,6 +141,7 @@ function uploadPhoto(p) {
       console.error('[uploadPhoto] 開啟試算表失敗：' + e.message);
       return { ok: false, error: '無法開啟試算表:' + e.message };
     }
+    mark('開啟試算表');
 
     // 檢查前端傳來的 tabName；如果空白、或是選到「模板」，
     // ★v4.5★ 就導向「基準日」的年月分頁（拍攝日優先 → 補傳自動歸回正確月份）
@@ -139,12 +153,14 @@ function uploadPhoto(p) {
     // 取得當月分頁；不存在就從模板建立（內含 LockService 防併發，見下方函式）
     const sh = getOrCreateMonthSheet_(ss, targetTab);
     console.log('[uploadPhoto] 目標分頁：' + targetTab);
+    mark('取得月份分頁');
 
     // 3. Z 欄 TextFinder 動態定位
     let matches = sh.getRange('Z:Z')
       .createTextFinder(key)
       .matchEntireCell(true)
       .findAll();
+    mark('Z欄定位');
 
     // 3-1. ★v4.3 自我修復★
     //     同一鍵出現多筆時，最常見原因是「模板列位移後殘留的舊鍵」。
@@ -170,6 +186,7 @@ function uploadPhoto(p) {
           .createTextFinder(key)
           .matchEntireCell(true)
           .findAll();
+        mark('Z欄自我修復');   // 只在真的觸發重建時才會出現在 lap 裡
       }
     }
 
@@ -208,18 +225,21 @@ function uploadPhoto(p) {
       console.warn('[uploadPhoto] 槽位全滿：' + key + '（共 ' + slotTotal + ' 格）');
       return { ok: false, error: '「' + key + '」的 ' + slotTotal + ' 個槽位都已有照片；要更換請先到試算表清空要重拍的那一格再上傳' };
     }
+    mark('槽位解析');
 
     // 4-2. 備份原檔到 Drive（設為公開可讀，CellImage 才讀得到）
     //      多槽位時檔名加「_槽位N」：避免互相覆蓋、造成先前槽位圖片斷鏈
     const suffix = (slotTotal > 1) ? '_槽位' + slotNo : '';
     const fileId = backupAndGetId_(p, blob, suffix);
     console.log('[uploadPhoto] Drive 備份完成 fileId=' + fileId);
+    mark('Drive備份');
 
     // 5. 強制統一欄寬列高
     //    ★批次版 setColumnWidths / setRowHeights：一次呼叫取代迴圈 14 次呼叫★
     //    ⚠ 範圍嚴格限制在照片這 4 欄 × 10 列，不觸及施工日期、機房名稱等其他列
     sh.setColumnWidths(targetCol, BOX_COLS, COL_WIDTH);
     sh.setRowHeights(targetRow, BOX_ROWS, ROW_HEIGHT);
+    mark('欄寬列高');
 
     // 6. 清除該位置殘留的舊「浮動圖片」（相容舊版 insertImage 產生的物件）
     try {
@@ -233,6 +253,7 @@ function uploadPhoto(p) {
       // 清舊圖失敗不影響主流程，記錄即可
       console.warn('[uploadPhoto] 清除舊浮動圖片失敗（不影響上傳）：' + e.message);
     }
+    mark('清舊浮動圖');
 
     // 7. ★CellImage：圖片真正成為儲存格「內容」，非浮動物件★
     //    前端已將照片裁成 404:330，比例吻合容器，故會 100% 填滿無白邊
@@ -252,6 +273,7 @@ function uploadPhoto(p) {
       method = 'IMAGE公式';
       targetCell.setFormula('=IMAGE("' + imageUrl + '",1)');
     }
+    mark('照片入格');
 
     // 8. ★v4.4 新增★ 自動填寫施工/完工日期（民國年格式，如 115/07/27）
     //    - 只在照片成功入格後執行；獨立 try...catch，日期失敗不影響照片歸檔
@@ -300,9 +322,12 @@ function uploadPhoto(p) {
     } catch (e) {
       console.warn('[uploadPhoto] 日期更新失敗（照片已入格，不影響）：' + e.message);
     }
+    mark('日期回寫');
 
     console.log('[uploadPhoto] 完成：' + key + ' → ' + targetTab + '!A' + targetRow +
                 '，耗時 ' + (Date.now() - t0) + ' ms');
+    // ★v4.7★ 逐段毫秒數：最大的那一項就是瓶頸所在
+    console.log('[uploadPhoto] 階段耗時(ms) ' + lap.join('｜'));
     return {
       ok: true,
       name: key + '.jpg',
