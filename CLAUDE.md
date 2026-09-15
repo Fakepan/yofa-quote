@@ -18,6 +18,89 @@
 
 ---
 
+# 系統架構（高公局拍照歸檔）
+
+> 這一節是**地圖**：講「資料怎麼流」。第 10 節講的是「哪裡不能碰」，兩者搭配看。
+> 檔案本身在 `gas-maintenance-photo/`，需要細節直接讀檔，不要靠這節的摘要下判斷。
+
+## 三個角色
+
+| 角色 | 檔案 | 做什麼 |
+|---|---|---|
+| 手機前端 | `index.html`（約 900 行） | 師傅操作：三層選單 → 拍照 → 壓縮 → 送出 |
+| GAS 後端 | `程式碼.gs`（約 1000 行，19 個函式） | `doGet` 送出網頁；`uploadPhoto` 處理每一張上傳 |
+| 資料落點 | Google 雲端 | 母版試算表 + Drive 備份資料夾 |
+
+## 一張照片的完整路徑
+
+**前端**（`index.html`）
+1. 三層連動選單：機房 → 設備 → 項目（資料來自後端 `getMenu()` 回傳的 `MENU_TREE`）
+2. 拍照或從相簿選（時間相機 App 拍的要走「相簿」才保得住浮水印）
+3. `parseExifDate()` 讀 EXIF tag `0x9003` 取拍攝日 → 決定月份分頁與施工/完工日期
+4. `compress()` 用 Canvas **Contain 等比縮放 + 白色補邊**到 `MAX_SIDE=1024`、比例 404:330、`JPEG_Q=0.75`
+5. `toDataURL` 轉 base64 → `google.script.run.uploadPhoto(payload)`
+
+**後端**（`程式碼.gs` 的 `uploadPhoto()`，這是唯一的熱路徑）
+
+| # | 做什麼 | 備註 |
+|---|---|---|
+| 0 | 參數防呆 → base64 解碼 → `validateJpegBytes_` 三重完整性檢查 | 擋「傳一半」的破圖 |
+| 1 | 基準日推導：EXIF 拍攝日優先，讀不到退回上傳日 | 決定分頁與日期，跨年不撕裂 |
+| 2 | `SpreadsheetApp.openById(MASTER_SHEET_ID)` | 母版約 80 MB（照片嵌在格子裡） |
+| 3 | `getOrCreateMonthSheet_()` 取當月分頁，不存在就從模板複製 | 含 LockService 防併發 |
+| 4 | `Z:Z` `createTextFinder().matchEntireCell(true).findAll()` 定位 | **整欄掃描** |
+| 5 | 同鍵多筆 → 自我修復：重建該分頁 Z 欄再查一次（6 小時一次） | 由 CacheService 的 `zfix_` 旗標節流 |
+| 6 | 逐個 match 算照片格起始列（`+1` 再用合併儲存格錨點校正），挑第一個空槽位 | 空槽位判定見 P-8 |
+| 7 | `backupAndGetId_()` 存 Drive 並設公開可讀 | **約 6 次 Drive 往返** |
+| 8 | `setColumnWidths` / `setRowHeights` 強制 404×330 | 批次版，各 1 次 |
+| 9 | `sh.getImages()` 清舊浮動圖片 | **全表掃描**，僅為相容舊版 `insertImage` |
+| 10 | `newCellImage().setSourceUrl(lh3 網址)` → `setValue`；失敗退回 `=IMAGE()` | 圖片成為儲存格「內容」 |
+| 11 | 掃本槽位 10 列的 F 欄，回寫施工/完工日期（民國年） | 1 次 `getValues` + 1 次 `setValues` |
+
+## 定位系統怎麼運作（為什麼 Z 欄是唯一真相）
+
+```
+母版 F 欄文字（照片內容說明:xxx）
+   └─ rebuildZColumnFor_ 依規則推導出定位鍵「機房__設備+項目說明」
+        └─ 寫進該分頁 Z 欄（第 26 欄），位置 = 照片格起始列
+             └─ uploadPhoto 用 TextFinder 比對整格相等找到它
+                  └─ 那一列（經合併儲存格校正）就是要塞照片的格子
+```
+
+**所以 `MENU_TREE` 的 `desc` 必須與母版 F 欄一字不差** —— 這就是 P-4 那條規則的來由，也是為什麼看起來像錯字的文字不能「順手修正」。
+
+## 三個資料落點
+
+| 落點 | 內容 | 壞掉會怎樣 |
+|---|---|---|
+| 母版試算表「模板」分頁 | 版面、F 欄說明文字、Z 欄定位鍵 | 新月份分頁都從這裡複製，改壞影響未來每一個月 |
+| 月份分頁（`YYYYMM`，純 6 位數） | 該月實際報表與照片 | 是**複製當下的快照**，模板後來新增的項目救不回來（P-10） |
+| Drive 備份資料夾 | 原圖，依 `年月/機房/` 分層 | 設為公開可讀，CellImage 才顯示得出來；權限改掉照片全變破圖 |
+
+## 19 個函式分兩類
+
+**自動跑的（師傅按上傳就會走到）**：`doGet`、`getMenu`、`uploadPhoto`、`getOrCreateMonthSheet_`、`backupAndGetId_`、`getOrCreate_`、`rebuildZColumnFor_`、`validateJpegBytes_`
+
+**手動執行的工具（在 GAS 編輯器選函式跑，不需重新部署）**：
+`buildZColumn`、`rebuildZColumnEverywhere`、`newMonthCopy`、`clearTemplatePhotos`、`normalizeTemplateLayout`(+Part1/Part2/`normalizeLayout_`)、`auditMenuVsMaster`、`auditAllMonthTabs`、`diagTest`
+
+> 稽核用的三支：`auditMenuVsMaster`（選單 ↔ 模板）、`auditAllMonthTabs`（唯讀、逐月份分頁健檢）、`diagTest`（能不能開表）。
+
+## 效能特性
+
+- **一次上傳約 5 秒**（業主 2026-09 回報）。**這不是 bug，是 GAS + Sheets API + Drive API 一次往返的正常成本。**
+- **下限**：這類流程壓到 2～3 秒是務實目標；要更快就得換架構（照片先落 Drive、歸檔改背景批次），代價是師傅拿不到「已歸檔」的即時確認。
+- **已知成本較高的呼叫**（尚未實測，依可疑度排序）：
+  1. 步驟 9 `sh.getImages()` —— 每次上傳都做全表掃描，但現行流程已不再產生浮動圖片，多半白掃
+  2. 步驟 7 `backupAndGetId_()` —— 每張都重新解析年月/機房資料夾，連拍十張就解析十遍
+  3. 步驟 4 `Z:Z` TextFinder —— 整欄掃描
+  4. 步驟 2 `openById` —— 80 MB 母版
+- **量測方式**：`uploadPhoto()` 已內建階段計時（v4.7），執行記錄會印
+  `[uploadPhoto] 階段耗時(ms) 解碼驗證:xx｜開啟試算表:xx｜…`，**最大的那一項就是瓶頸**。
+  優化前先看這行數字，不要憑猜測改。
+
+---
+
 # 工作守則
 
 > 【MUST】違反即停下回報；【SHOULD】預設遵守，偏離須說明原因。
