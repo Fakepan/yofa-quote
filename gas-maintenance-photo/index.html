@@ -3,57 +3,58 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#16305C">
+<meta name="theme-color" content="#142B52">
 <style>
 /* ============================================================
- * v10 視覺系統
- * 設計取向：工程現場工具，不是消費型 App
- *   ① 高對比 —— 機房光線差、戶外強光下都要看得清
- *   ② 大觸控區 —— 主要按鈕 ≥60px，戴手套也按得到
- *   ③ 步驟明確 —— 師傅隨時知道自己在第幾步、還差什麼
- *   ④ 數據可讀 —— 技術資訊用等寬數字，不會跳動
+ * v12.1 視覺系統 —— 現場工具優先，質感其次
+ *   ① 高對比      文字與邊框對比度都用實際色票量過，淺色／深色模式皆 ≥ WCAG AA；機房暗、戶外強光都看得清
+ *   ② 大觸控區    主要按鈕 ≥ 52px，戴手套也按得到
+ *   ③ 狀態看得見  每張照片：沒拍 → 已拍 → 上傳中 → 完成／失敗，用「顏色＋圖示＋文字」三重提示，不靠單一顏色
+ *   ④ 動畫克制    只動 transform / opacity（不觸發重排）；手機開「減少動態效果」就全部關掉
+ *   ⑤ 零外部依賴  不用 Tailwind CDN／字型 CDN：機房訊號差時 CDN 載不到，整頁就剩裸 HTML
  * 深色模式：機房夜間作業自動套用，不刺眼
  * ============================================================ */
 :root{
+  color-scheme:light dark;
   /* 品牌 */
-  --navy:        #1B3A6B;
-  --navy-deep:   #16305C;
-  --navy-soft:   #2C5490;
-  /* 工程安全色（高速公路意象），用於步驟指示與焦點 */
-  --amber:       #C2710C;
-  --amber-soft:  #FEF3E2;
-  /* 語意色 */
-  --ok:          #15803D;
-  --ok-soft:     #E9F6EE;
-  --err:         #B3261E;
-  --err-soft:    #FDECEA;
+  --navy:#1B3A6B;  --navy-deep:#142B52;  --navy-soft:#2C5490;  --on-navy:#FFFFFF;
+  --accent:#1B3A6B;               /* 文字／邊框用的強調色；深色模式換成亮藍。白字底才用 --navy */
+  /* 語意色（--on-* 是疊在該色底上的文字色） */
+  --amber:#8F5200; --amber-soft:#FEF1DC;
+  --ok:#157A3C;    --ok-soft:#E7F5EC;    --on-ok:#FFFFFF;
+  --err:#B3261E;   --err-soft:#FDECEA;   --on-err:#FFFFFF;
   /* 介面 */
-  --bg:          #F1F4F8;
-  --card:        #FFFFFF;
-  --line:        #DDE3EC;
-  --line-strong: #C3CCDA;
-  --ink:         #0E1726;
-  --ink-mid:     #40506A;
-  --sub:         #6B7A93;
-  --disabled-bg: #E4E9F0;
-  --disabled-ink:#9AA6B8;
-  --shadow-sm:   0 1px 2px rgba(16,32,64,.06);
-  --shadow-md:   0 2px 8px rgba(16,32,64,.08);
-  --shadow-lg:   0 8px 24px rgba(16,32,64,.12);
-  --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
+  --bg:#EDF1F6;  --card:#FFFFFF;  --tile:#F5F7FB;
+  --line:#E2E8F0;  --line-strong:#8795AB;     /* line：分隔用；line-strong：互動元件的邊框（對比 ≥ 3:1） */
+  --ink:#0E1726;  --ink-mid:#3B4A63;  --sub:#566680;
+  --track:#DCE4EF;  --disabled-bg:#E4E9F0;  --disabled-ink:#6F7E95;
+  --glass:rgba(255,255,255,.82);
+  --focus:rgba(27,58,107,.22);
+  --shimmer:rgba(255,255,255,.65);
+  --shadow-sm:0 1px 2px rgba(16,32,64,.06);
+  --shadow-md:0 1px 2px rgba(16,32,64,.04),0 8px 22px -6px rgba(16,32,64,.12);
+  --shadow-lg:0 14px 36px -10px rgba(16,32,64,.32);
+  --r-sm:10px; --r-md:14px; --r-lg:20px;
+  --gut:16px;                     /* 頁面左右留白；小手機縮成 12px */
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --spring:cubic-bezier(.3,1.5,.5,1);
 }
 @media (prefers-color-scheme: dark){
   :root{
-    --navy:#3E6BB0; --navy-deep:#16305C; --navy-soft:#5583C4;
-    --amber:#E39A3C; --amber-soft:#38290F;
-    --ok:#4ADE80; --ok-soft:#12301E;
-    --err:#F87171; --err-soft:#331616;
-    --bg:#0B121F; --card:#141E31; --line:#26334A; --line-strong:#39485F;
-    --ink:#E8EDF5; --ink-mid:#B4C0D2; --sub:#8494AC;
-    --disabled-bg:#1D2739; --disabled-ink:#5A6880;
+    --navy:#3E6BB0; --navy-deep:#142B52; --navy-soft:#5583C4; --accent:#8DB4F0;
+    --amber:#E9A24A; --amber-soft:#38290F;
+    --ok:#4ADE80; --ok-soft:#12301E; --on-ok:#06240F;
+    --err:#F87171; --err-soft:#331616; --on-err:#2B0808;
+    --bg:#0B121F; --card:#141E31; --tile:#1A263B;
+    --line:#26334A; --line-strong:#5F7090;
+    --ink:#E8EDF5; --ink-mid:#B4C0D2; --sub:#93A3BA;
+    --track:#26334A; --disabled-bg:#1D2739; --disabled-ink:#7C8BA3;
+    --glass:rgba(20,30,49,.78);
+    --focus:rgba(141,180,240,.35);
+    --shimmer:rgba(255,255,255,.09);
     --shadow-sm:0 1px 2px rgba(0,0,0,.4);
-    --shadow-md:0 2px 8px rgba(0,0,0,.45);
-    --shadow-lg:0 8px 24px rgba(0,0,0,.55);
+    --shadow-md:0 1px 2px rgba(0,0,0,.35),0 8px 22px -6px rgba(0,0,0,.55);
+    --shadow-lg:0 14px 36px -10px rgba(0,0,0,.7);
   }
 }
 
@@ -67,267 +68,363 @@ body{
   /* 底部留白，避免最後一顆按鈕被手機手勢列蓋住 */
   padding-bottom:env(safe-area-inset-bottom);
 }
+[hidden]{display:none!important}
+/* 防誤觸：在頁面頂端往下滑不會觸發瀏覽器的「下拉重新整理」（重新整理會讓還沒上傳的畫面狀態歸零）；
+ * 連點按鈕／下拉不會觸發雙擊縮放把整頁放大 */
+html,body{overscroll-behavior-y:contain}
+button,select,summary{touch-action:manipulation}
+button:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
 /* ---------- 頁首 ---------- */
 header{
-  background:linear-gradient(160deg,var(--navy-deep) 0%,var(--navy) 100%);
-  color:#fff;position:sticky;top:0;z-index:20;
-  padding:calc(14px + env(safe-area-inset-top)) 18px 14px;
+  position:relative;z-index:20;
+  background:
+    radial-gradient(120% 150% at 100% 0%,rgba(255,255,255,.15) 0%,rgba(255,255,255,0) 55%),
+    linear-gradient(160deg,var(--navy-deep) 0%,var(--navy) 100%);
+  color:#fff;
+  padding:calc(14px + env(safe-area-inset-top)) 18px 18px;
+  border-radius:0 0 26px 26px;
   box-shadow:var(--shadow-md);
 }
-.brand{display:flex;align-items:center;gap:11px}
+/* 矮螢幕（小手機）頁首不黏頂：省下約 110px 給清單，進度改看底部操作列 */
+@media (min-height:721px){header{position:sticky;top:0}}
+.brand{display:flex;align-items:center;gap:12px}
 .mark{
-  width:38px;height:38px;flex:none;border-radius:10px;
-  background:rgba(255,255,255,.13);
-  border:1px solid rgba(255,255,255,.22);
+  width:40px;height:40px;flex:none;border-radius:12px;
+  background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.24);
   display:flex;align-items:center;justify-content:center;
-  font-size:19px;font-weight:800;letter-spacing:.5px;
+  font-size:20px;font-weight:800;letter-spacing:.5px;
 }
 .brand-txt{min-width:0}
 .brand-txt b{display:block;font-size:18px;font-weight:750;letter-spacing:.4px;line-height:1.25}
 .brand-txt span{
-  display:block;font-size:11.5px;opacity:.72;margin-top:1px;
+  display:block;font-size:11.5px;opacity:.8;margin-top:1px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .ver{
   margin-left:auto;flex:none;align-self:flex-start;
-  font-size:10.5px;font-weight:600;letter-spacing:.3px;
-  padding:3px 8px;border-radius:20px;
-  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);
+  font-size:10.5px;font-weight:650;letter-spacing:.3px;
+  padding:3px 9px;border-radius:20px;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.26);
 }
 
 /* ---------- 步驟指示 ---------- */
-.steps{display:flex;align-items:flex-start;margin-top:14px;padding:0 2px}
+.steps{display:flex;align-items:flex-start;margin-top:16px;padding:0 2px}
 .step{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;position:relative}
 .step::before{         /* 連接線 */
   content:'';position:absolute;top:12px;left:-50%;width:100%;height:2px;
-  background:rgba(255,255,255,.2);
+  background:rgba(255,255,255,.22);border-radius:2px;
 }
 .step:first-child::before{display:none}
 .dot{
-  width:25px;height:25px;border-radius:50%;
+  width:26px;height:26px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
   font-size:12.5px;font-weight:700;position:relative;z-index:1;
-  background:rgba(255,255,255,.16);color:rgba(255,255,255,.6);
-  border:1.5px solid transparent;transition:.22s;
+  background:rgba(255,255,255,.16);color:rgba(255,255,255,.82);
+  transition:background-color .25s,color .25s,transform .3s var(--spring);
 }
-.step-t{font-size:11px;opacity:.6;letter-spacing:.2px;transition:.22s}
-.step.on .dot{background:#fff;color:var(--navy-deep);transform:scale(1.06)}
+.step-t{font-size:11px;opacity:.78;letter-spacing:.2px;transition:opacity .25s}
+.step.on .dot{background:#fff;color:var(--navy-deep);transform:scale(1.1)}
 .step.on .step-t{opacity:1;font-weight:650}
-.step.done .dot{background:rgba(255,255,255,.9);color:var(--navy-deep)}
-.step.done .step-t{opacity:.85}
+.step.done .dot{background:rgba(255,255,255,.92);color:var(--navy-deep)}
+.step.done .step-t{opacity:.9}
 
-/* ---------- 版面 ---------- */
-.wrap{padding:16px 16px 44px;max-width:560px;margin:0 auto}
-
-/* ---------- 卡片 ---------- */
+/* ---------- 版面與卡片 ---------- */
+/* 底部刻意不留 padding：sticky 的操作列被限制在 .wrap 內容框之內，padding 會讓它捲到底時離螢幕下緣空出一條縫 */
+.wrap{padding:18px var(--gut) 0;max-width:560px;margin:0 auto}
 .card{
   background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r-lg);padding:16px 15px;margin-bottom:14px;
-  box-shadow:var(--shadow-sm);
+  border-radius:var(--r-lg);padding:18px 16px;margin-bottom:16px;
+  box-shadow:var(--shadow-md);
 }
-.card-h{
-  display:flex;align-items:center;gap:8px;
-  margin:-2px 0 13px;padding-bottom:11px;border-bottom:1px solid var(--line);
-}
+.card-h{display:flex;align-items:center;gap:10px;margin:0 0 16px}
 .card-n{
-  width:22px;height:22px;flex:none;border-radius:6px;
-  background:var(--navy);color:#fff;
-  font-size:12px;font-weight:700;
+  width:24px;height:24px;flex:none;border-radius:8px;
+  background:var(--navy);color:var(--on-navy);
+  font-size:12.5px;font-weight:700;
   display:flex;align-items:center;justify-content:center;
 }
-.card-h h2{margin:0;font-size:14.5px;font-weight:700;letter-spacing:.3px;color:var(--ink)}
+.card-h h2{margin:0;font-size:15px;font-weight:700;letter-spacing:.3px;color:var(--ink)}
+#listCard:not([hidden]){animation:rise .42s var(--ease) both}
 
 /* ---------- 表單 ---------- */
-.field{margin-bottom:13px}
+.field{margin-bottom:14px}
 .field:last-child{margin-bottom:0}
 label{
-  display:block;font-size:12px;font-weight:700;letter-spacing:.6px;
-  color:var(--sub);margin:0 0 6px 2px;text-transform:none;
+  display:block;font-size:12.5px;font-weight:700;letter-spacing:.5px;
+  color:var(--sub);margin:0 0 7px 2px;
 }
 select{
-  width:100%;padding:15px 42px 15px 14px;font-size:17px;font-weight:500;
+  width:100%;min-height:56px;padding:0 46px 0 16px;font-size:17px;font-weight:500;
   border:1.5px solid var(--line-strong);border-radius:var(--r-md);
   background-color:var(--card);color:var(--ink);
-  appearance:none;font-family:inherit;transition:.16s;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='none' stroke='%236B7A93' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l5 5 5-5'/></svg>");
-  background-repeat:no-repeat;background-position:right 12px center;
+  -webkit-appearance:none;appearance:none;font-family:inherit;
+  transition:border-color .16s,box-shadow .16s;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='none' stroke='%23566680' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l5 5 5-5'/></svg>");
+  background-repeat:no-repeat;background-position:right 14px center;
 }
-select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,58,107,.13)}
+select:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--focus)}
 select:disabled{
   background-color:var(--disabled-bg);color:var(--disabled-ink);
   border-color:var(--line);cursor:not-allowed;
 }
-select.filled{border-color:var(--navy-soft);font-weight:600}
-
-/* ---------- 按鈕 ---------- */
-.btn{
-  width:100%;min-height:60px;padding:16px;
-  font-family:inherit;font-size:17.5px;font-weight:700;letter-spacing:.4px;
-  border:none;border-radius:var(--r-md);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:9px;
-  transition:transform .1s,box-shadow .16s,background .16s;
-}
-.btn:active:not(:disabled){transform:scale(.985)}
-.btn svg{flex:none}
-.btn-primary{background:var(--navy);color:#fff;box-shadow:var(--shadow-md)}
-.btn-primary:active:not(:disabled){background:var(--navy-deep)}
-.btn-outline{
-  background:var(--card);color:var(--navy);
-  border:2px solid var(--navy);box-shadow:var(--shadow-sm);
-}
-.btn-go{background:var(--ok);color:#fff;font-size:18.5px;box-shadow:var(--shadow-md)}
-.btn-quiet{
-  min-height:50px;font-size:15.5px;font-weight:600;
-  background:transparent;color:var(--sub);border:1.5px solid var(--line-strong);
-  box-shadow:none;
-}
-.btn:disabled{
-  background:var(--disabled-bg)!important;color:var(--disabled-ink)!important;
-  border-color:var(--disabled-bg)!important;box-shadow:none!important;cursor:not-allowed;
-}
-.stack{display:flex;flex-direction:column;gap:10px}
-.hint{
-  font-size:12px;color:var(--sub);text-align:center;
-  margin-top:10px;line-height:1.5;
+select.filled{border-color:var(--accent);font-weight:600}
+@media (prefers-color-scheme: dark){
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='none' stroke='%2393A3BA' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l5 5 5-5'/></svg>")}
 }
 
-/* ---------- ★v12★ 拍攝清單（批次上傳） ----------
+/* ---------- 拍攝清單 ----------
  * 一般設備 5～8 項直接平鋪；超過 12 項（泰控「其他」45 項）才分組並預設收合 */
-[hidden]{display:none!important}
 .tally{
-  margin-left:auto;font-size:12px;font-weight:700;color:var(--sub);
+  margin-left:auto;padding:3px 11px;border-radius:999px;
+  font-size:12.5px;font-weight:700;color:var(--ink-mid);
+  background:var(--tile);border:1px solid var(--line);
   font-variant-numeric:tabular-nums;
+  transition:background-color .3s,color .3s,border-color .3s;
 }
-.cloudnote{font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 6px}
+.tally.full{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.cloudnote{font-size:12.5px;line-height:1.5;color:var(--sub);margin:-6px 2px 12px}
 
-.grp{border-top:1px solid var(--line)}
-.grp:first-child{border-top:none}
+.grp{margin-top:10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--tile);overflow:hidden}
+.grp:first-child{margin-top:0}
 .grp>summary{
-  list-style:none;cursor:pointer;min-height:52px;padding:10px 2px;
+  list-style:none;cursor:pointer;min-height:56px;padding:10px 14px;
   display:flex;align-items:center;gap:10px;
   font-size:15px;font-weight:700;color:var(--ink);
 }
 .grp>summary::-webkit-details-marker{display:none}
+.grp>summary:focus-visible{outline-offset:-3px}
 .grp-n{
-  margin-left:auto;font-size:12px;font-weight:700;color:var(--sub);
+  margin-left:auto;font-size:12.5px;font-weight:700;color:var(--sub);
   font-variant-numeric:tabular-nums;
 }
 .grp-n.bad{color:var(--err)}
-.grp>summary svg{flex:none;color:var(--sub);transition:transform .16s}
+.grp>summary svg{flex:none;color:var(--sub);transition:transform .25s var(--ease)}
 .grp[open]>summary svg{transform:rotate(180deg)}
+.grp-body{padding:0 10px 10px}
+.grp-body .task{background:var(--card)}
 
+/* 一項檢查 = 一塊圓角磚：左側狀態圓點、中間文字、右側按鈕；拍了之後底下展開縮圖 */
 .task{
-  display:grid;grid-template-columns:22px 1fr auto;column-gap:10px;row-gap:8px;
-  align-items:center;padding:12px 0;border-top:1px solid var(--line);
+  display:grid;grid-template-columns:26px 1fr auto;column-gap:12px;align-items:center;
+  padding:12px;margin-top:10px;
+  background:var(--tile);border:1px solid var(--line);border-radius:var(--r-md);
+  transition:background-color .3s,border-color .3s;
 }
-.task:first-child{border-top:none}
+.task:first-child{margin-top:0}
+.task.is-ready{border-color:var(--navy-soft)}
+.task.is-uploading{border-color:var(--amber)}
+.task.is-done{background:var(--ok-soft);border-color:transparent}
+.grp-body .task.is-done{background:var(--ok-soft)}
+.task.is-failed{background:var(--err-soft);border-color:var(--err);animation:shake .45s}
 
 /* 左側狀態圓點：空 → 已拍 → 上傳中 → 完成／失敗 */
 .st{
-  width:22px;height:22px;border-radius:50%;box-sizing:border-box;
+  width:26px;height:26px;border-radius:50%;
   border:2px solid var(--line-strong);color:var(--card);
   display:flex;align-items:center;justify-content:center;
+  transition:background-color .25s,border-color .25s;
 }
-.st svg{width:12px;height:12px;display:none}
+.st svg{width:14px;height:14px;display:none}
 .is-ready .st{background:var(--navy);border-color:var(--navy)}
-.is-done .st{background:var(--ok);border-color:var(--ok)}
+.is-done .st{background:var(--ok);border-color:var(--ok);color:var(--on-ok);animation:pop .5s var(--spring)}
 .is-done .st .i-ok{display:block}
-.is-failed .st{background:var(--err);border-color:var(--err)}
+.is-failed .st{background:var(--err);border-color:var(--err);color:var(--on-err)}
 .is-failed .st .i-x{display:block}
 .is-uploading .st{
   border-color:var(--line-strong);border-top-color:var(--amber);
   animation:spin .8s linear infinite;
 }
-@keyframes spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){
-  .is-uploading .st{animation:none;border-color:var(--amber)}
-}
 
 .task-txt{min-width:0}
 .task-label{
-  font-size:15.5px;font-weight:650;line-height:1.4;color:var(--ink);word-break:break-word;
+  font-size:16px;font-weight:650;line-height:1.4;color:var(--ink);word-break:break-word;
 }
-.task-note,.task-cloud{font-size:12px;line-height:1.5;margin-top:2px}
+.task-note,.task-cloud{font-size:12.5px;line-height:1.5;margin-top:3px}
 .task-note{color:var(--ink-mid);white-space:pre-line}
 .task-note.ok{color:var(--ok)}
-.task-note.err{color:var(--err);font-weight:600}
+.task-note.warn{color:var(--amber);font-weight:600}
+.task-note.err{color:var(--err);font-weight:650}
 .task-cloud{color:var(--amber);font-weight:600}
 .task-note:empty,.task-cloud:empty{display:none}
 
+/* 按鈕：還沒拍 = 實心主色（下一步該按哪裡一眼看出）；拍過了 = 淡色外框的「重拍」 */
 .task-btn{
-  display:flex;align-items:center;gap:6px;min-height:52px;padding:0 13px;
+  display:flex;align-items:center;gap:7px;min-height:52px;padding:0 15px;
   font-family:inherit;font-size:14.5px;font-weight:700;white-space:nowrap;
-  color:var(--navy);background:var(--card);
-  border:2px solid var(--navy);border-radius:var(--r-md);cursor:pointer;
-  transition:transform .1s;
+  color:var(--on-navy);background:var(--navy);
+  border:1.5px solid var(--navy);border-radius:var(--r-md);cursor:pointer;
+  transition:transform .12s var(--ease),background-color .2s,color .2s,border-color .2s;
 }
-.task-btn:active:not(:disabled){transform:scale(.97)}
-.is-ready .task-btn,.is-failed .task-btn{color:var(--sub);border-color:var(--line-strong)}
+.task-btn:active:not(:disabled){transform:scale(.96)}
+.is-ready .task-btn,.is-failed .task-btn,.is-uploading .task-btn{
+  color:var(--ink-mid);background:var(--card);border-color:var(--line-strong);
+}
 .task-btn:disabled{
   color:var(--disabled-ink);background:var(--disabled-bg);
   border-color:var(--disabled-bg);cursor:not-allowed;
 }
 
-/* 縮圖：拍了才出現，顯示的就是最後會歸檔的樣子（含白邊） */
-.task-shot{grid-column:2 / -1;display:none}
-.task.has-shot .task-shot{display:block}
-.task-shot img{
-  display:block;width:136px;max-width:100%;aspect-ratio:404 / 330;
-  border-radius:8px;border:1px solid var(--line-strong);background:#fff;
+/* 縮圖：拍了才展開（grid 0fr → 1fr，只動高度比例＋透明度/位移），顯示的就是最後會歸檔的樣子（含白邊）。
+ * 處理中先放骨架，縮圖出來時直接取代，版面不會跳動。 */
+.task-shot{
+  grid-column:1 / -1;display:grid;grid-template-rows:0fr;
+  transition:grid-template-rows .4s var(--ease);
 }
+.task.has-shot .task-shot,.task.is-busy .task-shot{grid-template-rows:1fr}
+.shot-in{min-height:0;overflow:hidden}
+.shot-frame{
+  position:relative;width:150px;max-width:100%;margin:12px 0 0 38px;
+  aspect-ratio:404 / 330;border-radius:10px;overflow:hidden;
+  border:1px solid var(--line-strong);background:#fff;
+  opacity:0;transform:translateY(-8px) scale(.96);transform-origin:left top;
+  transition:opacity .3s .05s,transform .45s var(--spring);
+}
+.task.has-shot .shot-frame,.task.is-busy .shot-frame{opacity:1;transform:none}
+.shot-frame img{display:block;width:100%;height:100%;object-fit:contain}
+.shot-skel{position:absolute;inset:0;background:var(--tile);opacity:0;transition:opacity .2s;overflow:hidden}
+.shot-skel::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(100deg,transparent 20%,var(--shimmer) 50%,transparent 80%);
+  transform:translateX(-100%);animation:shimmer 1.1s ease-in-out infinite;
+}
+.task.is-busy .shot-skel{opacity:1}
 
-/* 底部操作列：黏在畫面下緣，上傳中也隨時看得到進度 */
+/* ---------- 底部操作列：毛玻璃，黏在畫面下緣，上傳中也隨時看得到進度 ---------- */
 .actbar{
   position:sticky;bottom:0;z-index:15;
-  margin:14px -16px 0;padding:10px 16px calc(12px + env(safe-area-inset-bottom));
-  background:var(--card);border-top:1px solid var(--line);
-  box-shadow:0 -6px 16px rgba(16,32,64,.07);
+  margin:16px calc(var(--gut) * -1) 0;padding:10px var(--gut) calc(12px + env(safe-area-inset-bottom));
+  background:var(--glass);
+  -webkit-backdrop-filter:saturate(1.5) blur(12px);backdrop-filter:saturate(1.5) blur(12px);
+  border-top:1px solid var(--line);
+  box-shadow:0 -10px 28px -14px rgba(16,32,64,.22);
   display:flex;flex-direction:column;gap:8px;
 }
+.actbar:not([hidden]){animation:slideup .42s var(--ease) both}
+/* 不支援毛玻璃、系統要求減少透明度、或低階手機：改實色（模糊背景每個畫面都要重算，舊手機會吃力） */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .actbar{background:var(--card)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .actbar{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--card)}
+}
+html.lite .actbar{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--card)}
+
 .act-top{display:flex;align-items:center;gap:10px;min-height:32px}
 .actmsg{flex:1;min-width:0;font-size:12.5px;line-height:1.45;color:var(--ink-mid)}
-.actmsg.warn{color:var(--amber);font-weight:600}
+.actmsg.warn{color:var(--amber);font-weight:650}
 .linkbtn{
   flex:none;background:none;border:none;padding:6px 4px;min-height:36px;
-  font-family:inherit;font-size:13px;font-weight:600;color:var(--sub);
+  font-family:inherit;font-size:13px;font-weight:650;color:var(--sub);
   text-decoration:underline;cursor:pointer;
 }
 .linkbtn.confirm{color:var(--err)}
-.prog{height:6px;border-radius:6px;background:var(--disabled-bg);overflow:hidden}
-.prog i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s}
-.btn-go.busy{cursor:progress}
-body.has-bar #toast{bottom:calc(158px + env(safe-area-inset-bottom))}
 
-/* ---------- 計數 ---------- */
+/* 「全部上傳」：平常是實心綠按鈕；上傳中變成同一顆的進度條。
+ * 兩層疊在一起——底層（深字、軌道色）＋上層（白字、綠底），上層用 clip-path 只露出已完成的比例，
+ * 所以文字在進度邊界上會「剛好換色」，不論進度走到哪，每個字都有足夠對比。--p 由 JS 設定（0~1）。 */
+.btn-go{
+  position:relative;isolation:isolate;overflow:hidden;
+  width:100%;min-height:60px;padding:0 16px;
+  font-family:inherit;font-size:18px;font-weight:700;letter-spacing:.3px;
+  border:none;border-radius:var(--r-md);cursor:pointer;
+  background:var(--ok);color:var(--on-ok);
+  box-shadow:0 8px 18px -8px rgba(21,122,60,.6);
+  transition:min-height .3s var(--ease),border-radius .3s var(--ease),transform .1s var(--ease),box-shadow .3s;
+}
+.btn-go:active:not(:disabled){transform:scale(.985)}
+.btn-go:disabled{background:var(--disabled-bg);color:var(--disabled-ink);box-shadow:none;cursor:not-allowed}
+.btn-go.busy{background:var(--track);color:var(--ink);box-shadow:none;border-radius:999px;min-height:56px;cursor:progress}
+.lyr{
+  position:absolute;top:0;right:0;bottom:0;left:0;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;
+}
+.lyr-on{
+  background:var(--ok);color:var(--on-ok);isolation:isolate;
+  clip-path:inset(0 calc((1 - var(--p,1)) * 100%) 0 0);
+  transition:clip-path .55s var(--ease);
+}
+.lyr-on::before{    /* 上傳中：斜紋沿進度條流動（只動 transform，不重繪） */
+  content:'';position:absolute;top:0;bottom:0;left:-28px;right:0;z-index:-1;opacity:0;
+  background-image:linear-gradient(135deg,rgba(255,255,255,.18) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.18) 75%,transparent 75%,transparent);
+  background-size:28px 28px;animation:barber .9s linear infinite;
+}
+.btn-go.busy .lyr-on{clip-path:inset(0 calc((1 - var(--p,1)) * 100%) 0 0 round 999px)}   /* 進度條前緣圓頭 */
+.btn-go.busy .lyr-on::before{opacity:1}
+.btn-go:disabled .lyr-on{display:none}
+.btn-go.busy .lyr{font-size:16px}
+.btn-go.busy .lyr svg{display:none}
+
+/* ---------- 計數（放在操作列上方，捲到底時操作列才能貼著螢幕下緣） ---------- */
 .count{
-  display:none;margin-top:16px;text-align:center;
+  display:none;margin:-4px 0 18px;text-align:center;
   font-size:13px;font-weight:600;color:var(--sub);
   font-variant-numeric:tabular-nums;
 }
 .count.show{display:block}
 
-/* ---------- Toast ---------- */
+/* ---------- Toast：頁面上緣滑下來（不會跟底部操作列打架）。
+ * toast 本身不攔截點擊（才不會蓋住底下的下拉選單），只有右側 × 可按 ---------- */
 #toast{
-  position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));
-  transform:translateX(-50%) translateY(22px);
-  background:var(--ink);color:#fff;
-  padding:14px 20px;border-radius:14px;
-  font-size:14.5px;font-weight:600;line-height:1.5;
-  opacity:0;transition:.26s cubic-bezier(.2,.8,.3,1);
-  pointer-events:none;max-width:min(88%,460px);text-align:left;
-  box-shadow:var(--shadow-lg);z-index:60;
-  word-break:break-word;
+  position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));z-index:60;
+  display:flex;align-items:flex-start;gap:4px;
+  width:max-content;max-width:min(92vw,460px);padding:11px 6px 11px 12px;border-radius:18px;
+  background:var(--ink);color:var(--bg);
+  font-size:14.5px;font-weight:600;line-height:1.5;word-break:break-word;
+  box-shadow:var(--shadow-lg);
+  opacity:0;pointer-events:none;
+  transform:translate(-50%,-24px) scale(.96);
+  transition:transform .45s var(--spring),opacity .2s;
 }
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#toast.ok{background:var(--ok)}
-#toast.err{background:var(--err)}
+#toast.show{opacity:1;transform:translate(-50%,0) scale(1)}
+#toast.ok{background:var(--ok);color:var(--on-ok)}
+#toast.err{background:var(--err);color:var(--on-err)}
+.toast-body{display:flex;align-items:flex-start;gap:11px;min-width:0;padding-top:1px}
+.toast-ic{
+  flex:none;width:24px;height:24px;margin-top:1px;border-radius:50%;
+  background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;
+}
+.toast-ic svg{width:15px;height:15px}
+.toast-x{
+  flex:none;width:36px;height:36px;margin:-2px 0 -2px 2px;padding:0;border:0;border-radius:50%;
+  background:transparent;color:inherit;opacity:.85;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;pointer-events:none;
+}
+#toast.show .toast-x{pointer-events:auto}
+.toast-x svg{width:16px;height:16px}
 
 canvas{display:none}
 
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{0%{transform:scale(.5)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}45%{transform:translateX(4px)}70%{transform:translateX(-2px)}}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}}
+@keyframes slideup{from{transform:translateY(100%)}}
+@keyframes shimmer{to{transform:translateX(100%)}}
+@keyframes barber{to{transform:translateX(28px)}}
+
+/* 手機開了「減少動態效果」：動畫、轉場全部收掉（狀態仍用顏色＋圖示＋文字表達，不受影響） */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .is-uploading .st{border-color:var(--amber)}
+}
+/* 低階手機（JS 依記憶體／核心數判斷加上 .lite）：關掉持續性動畫 */
+html.lite .lyr-on::before,html.lite .shot-skel::after{animation:none}
+
+/* 小手機（≤380px，例如 360px 的 Android）：左右留白縮小；「拍照/選圖」按鈕掉到文字下方，
+ * 檢查項目名稱（最長 14 個字）才有足夠寬度，不會被擠成三四行 */
+@media (max-width:380px){
+  :root{--gut:12px}
+  .card{padding:16px 12px}
+  .task{grid-template-columns:26px 1fr}
+  .task-btn{grid-column:2;justify-self:start;margin-top:10px}
+}
+
 /* 寬螢幕：維持單欄手機版型（現場用），但加點呼吸感 */
 @media (min-width:640px){
-  .wrap{padding-top:22px}
+  .wrap{padding-top:24px}
 }
 </style>
 </head>
@@ -335,12 +432,12 @@ canvas{display:none}
 
 <header>
   <div class="brand">
-    <div class="mark">佑</div>
+    <div class="mark" aria-hidden="true">佑</div>
     <div class="brand-txt">
       <b>佑發 · 保養拍照</b>
       <span>高速公路局北區養護工程分局</span>
     </div>
-    <div class="ver">v12</div>
+    <div class="ver">v12.1</div>
   </div>
 
   <!-- 步驟指示：讓師傅隨時知道進行到哪 -->
@@ -385,26 +482,35 @@ canvas{display:none}
   <!-- 共用的檔案選擇器（不加 capture：手機會自己問「拍照／相簿」，時間相機 App 拍的照片走相簿才保得住浮水印） -->
   <input type="file" id="fileInput" accept="image/*" style="display:none">
 
-  <!-- ③ 全部上傳：黏在畫面下緣，一張接一張依序送出 -->
+  <div class="count" id="count"></div>
+
+  <!-- ③ 全部上傳：黏在畫面下緣，一張接一張依序送出；上傳中「全部上傳」按鈕本身變成進度條 -->
   <div class="actbar" id="actBar" hidden>
     <div class="act-top" id="actTop">
-      <div class="actmsg" id="actMsg"></div>
+      <div class="actmsg" id="actMsg" aria-live="polite"></div>
       <button type="button" class="linkbtn" id="clearBtn" hidden>清除全部</button>
     </div>
-    <div class="prog" id="prog" hidden><i id="progFill"></i></div>
-    <button class="btn btn-go" id="upAllBtn" disabled>
-      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>
-      </svg>
-      <span id="upAllTxt">全部上傳</span>
+    <button class="btn-go" id="upAllBtn" disabled>
+      <span class="lyr lyr-base">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+        <span id="upAllTxt">全部上傳</span>
+      </span>
+      <span class="lyr lyr-on" aria-hidden="true">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+        <span id="upAllTxt2">全部上傳</span>
+      </span>
     </button>
   </div>
 
-  <div class="count" id="count"></div>
 </div>
 
 <canvas id="cv"></canvas>
-<div id="toast"></div>
+<div id="toast">
+  <div class="toast-body" id="toastBody" role="status" aria-live="polite" aria-atomic="true">
+    <span class="toast-ic" id="toastIc" aria-hidden="true"></span><span class="toast-tx" id="toastTx"></span>
+  </div>
+  <button type="button" class="toast-x" id="toastX" aria-label="關閉提示" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
 
 <script>
 /* ============================================================
@@ -416,15 +522,28 @@ const JPEG_Q      = 0.75;      // JPEG 品質（0~1）
 const MAX_FILE_MB = 25;        // 原始檔案大小上限（MB），超過視為選錯檔，直接擋下
 const MENU_RETRY  = 3;         // 選單載入失敗時的自動重試次數
 const GROUP_MIN   = 12;        // ★v12★ 一個設備的檢查項目超過這個數才分組（泰控「其他」45 項）
-const THUMB_W     = 160;       // ★v12★ 清單縮圖寬度（px）
-const NET_FAIL_MAX = 3;        // ★v12★ 連續幾次「連線失敗」就暫停佇列，避免網路斷了還一張張等逾時
+const THUMB_W     = 240;       // ★v12.1★ 清單縮圖寬度（px）；v12 的 160 在 3 倍螢幕上會糊
+const NET_FAIL_MAX = 3;        // ★v12★ 連續幾張「連線失敗」就暫停佇列，避免網路斷了還一張張等逾時
+const RETRY      = { max: 2, wait: [2000, 8000], busy: 10000 };  // ★v12.1★ 每張失敗後最多自動重試 max 次（共 1+max 次嘗試）；第 1、2 次重試前各等 wait[i] ms；
+                                                                    // 後端回「系統忙碌中」時至少等 busy ms（後端訊息本身就叫人等 10 秒）。重試的安全規則見「失敗重試」一節
 
 let MENU = {}, uploadedCount = 0;
 const $ = id => document.getElementById(id);
 
+/* ★v12.1★ 低階手機判斷：記憶體 ≤ 2GB 或 CPU 核心 ≤ 4 → <html> 加上 .lite，CSS 據此關掉毛玻璃與持續性動畫
+ * （模糊背景每個畫面都要重算，舊手機會發燙、卡頓）。deviceMemory 只有 Chromium 系有；Safari 讀不到就不會被判成低階。 */
+try {
+  if ((navigator.deviceMemory && navigator.deviceMemory <= 2) ||
+      (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)) {
+    document.documentElement.classList.add('lite');
+  }
+} catch (e) {
+  console.warn('[lite] 無法判斷裝置等級（不影響使用）：', e);
+}
+
 /* ★v12★ 清單式批次上傳的狀態
  * tasks 的每一項：{ desc, label, status, blob, thumb, shotYmd, cropText, cropBad,
- *                  error, where, cloud, busy, el }
+ *                  error, where, cloud, busy, attempt, restored, el }
  * status：empty（還沒拍）→ ready（已拍）→ uploading → done | failed
  * 照片只存「壓縮後的 Blob」與一張小縮圖，不存 dataURL：
  *   45 張 dataURL 預覽解碼後的點陣圖約 150 MB，舊手機會當掉；
@@ -435,6 +554,7 @@ let pendingTask = null;   // 按下某一項的「拍照/選圖」後，正在�
 let uploading = false;
 let lookupSeq = 0;        // 雲端狀態查詢的序號：換設備後，舊查詢的回應一律丟棄
 let wakeLock = null;
+let runState = null;      // ★v12.1★ 上傳進行中的進度 { total, done, retry, finished }；沒在上傳時是 null
 
 /* ============================================================
  * ★v10★ 步驟指示器
@@ -567,6 +687,7 @@ function loadMenu(attempt) {
         r.innerHTML = '<option value="">請選擇機房…</option>';
         Object.keys(MENU).forEach(k => r.add(new Option(k, k)));
         console.log('[getMenu] 載入成功，機房數：' + Object.keys(MENU).length);
+        restoreSaved();     // ★v12.1★ 上次有拍好沒傳的照片 → 自動回到那個設備
       } catch (err) {
         console.error('[getMenu] 資料異常：', err);
         toast('選單資料異常：' + err.message, 'err');
@@ -623,11 +744,12 @@ function showList() {
     tasks = items.map(x => ({
       desc: x.desc, label: x.label || x.desc, status: 'empty',
       blob: null, thumb: '', shotYmd: null, cropText: '', cropBad: false,
-      error: '', where: '', cloud: null, busy: false, el: null
+      error: '', where: '', cloud: null, busy: false, attempt: 0, restored: false, el: null
     }));
     groups = makeGroups(tasks);
     renderList();
     lookupFilled();
+    hydrate(lookupSeq);      // ★v12.1★ 把這個設備的暫存照片填回清單
   } else if (equip) {
     console.warn('[menu] 設備「' + equip + '」底下沒有檢查項目');
     toast('此設備沒有檢查項目，請檢查選單來源', 'err');
@@ -635,7 +757,6 @@ function showList() {
   const show = tasks.length > 0;
   $('listCard').hidden = !show;
   $('actBar').hidden = !show;
-  document.body.classList.toggle('has-bar', show);
   paintSummary();
 }
 
@@ -705,7 +826,7 @@ function buildRow(t) {
     '<span class="st" aria-hidden="true">' + SVG_OK + SVG_X + '</span>' +
     '<div class="task-txt"><div class="task-label"></div><div class="task-note"></div><div class="task-cloud"></div></div>' +
     '<button type="button" class="task-btn">' + SVG_CAM + '<span></span></button>' +
-    '<div class="task-shot"><img alt="照片縮圖"></div>';
+    '<div class="task-shot"><div class="shot-in"><div class="shot-frame"><img alt=""><span class="shot-skel"></span></div></div></div>';
   el.querySelector('.task-label').textContent = t.label;   // textContent：選單文字不會被當成 HTML
   el.querySelector('.task-btn').onclick = () => pickPhoto(t);
   t.el = el;
@@ -732,26 +853,33 @@ function paintTask(t) {
   const el = t.el;
   if (!el) return;
   const cs = cloudState(t);
-  el.className = 'task is-' + t.status + (t.thumb ? ' has-shot' : '');
+  el.className = 'task is-' + t.status + (t.thumb ? ' has-shot' : '') + (t.busy ? ' is-busy' : '');
 
   let note = '', kind = '';
   if (t.status === 'failed')         { note = t.error || '上傳失敗'; kind = 'err'; }
   else if (t.status === 'done')      { note = '已歸檔' + (t.where ? '　' + t.where : ''); kind = 'ok'; }
-  else if (t.status === 'uploading') { note = '上傳中…'; }
+  else if (t.status === 'uploading') {
+    note = t.attempt ? '上一次沒成功，自動重試中（第 ' + t.attempt + '/' + RETRY.max + ' 次）…' : '上傳中…';
+    kind = t.attempt ? 'warn' : '';
+  }
   else if (t.busy)                   { note = '處理照片中…'; }
-  else if (t.status === 'ready')     { note = shotText(t); kind = t.cropBad ? 'err' : ''; }
+  else if (t.status === 'ready')     { note = (t.restored ? '已從暫存找回\n' : '') + shotText(t); kind = t.cropBad ? 'err' : ''; }
   const n = el.querySelector('.task-note');
   n.textContent = note;
   n.className = 'task-note' + (kind ? ' ' + kind : '');
   el.querySelector('.task-cloud').textContent = (t.status === 'done' || t.status === 'uploading') ? '' : cs.note;
 
-  const img = el.querySelector('.task-shot img');
-  if (t.thumb && img.getAttribute('src') !== t.thumb) img.src = t.thumb;   // 縮圖沒變就不重設，避免閃爍
+  const img = el.querySelector('.shot-frame img');
+  if (t.thumb && img.getAttribute('src') !== t.thumb) {      // 縮圖沒變就不重設，避免閃爍
+    img.alt = t.label + ' 的照片縮圖';
+    img.src = t.thumb;
+  }
 
   const btn = el.querySelector('.task-btn');
+  const btnTxt = t.status === 'done' ? '已完成' : (cs.block ? '已滿' : (t.thumb ? '重拍/重選' : '拍照/選圖'));
   btn.disabled = uploading || t.busy || t.status === 'done' || cs.block;
-  btn.querySelector('span').textContent =
-    t.status === 'done' ? '已完成' : (cs.block ? '已滿' : (t.thumb ? '重拍/重選' : '拍照/選圖'));
+  btn.querySelector('span').textContent = btnTxt;
+  btn.setAttribute('aria-label', t.label + '：' + btnTxt);   // 每一列的按鈕文字都一樣，螢幕報讀要靠這個知道是哪一項
 }
 
 function pendingTasks() { return tasks.filter(t => t.blob && t.status !== 'done'); }
@@ -761,6 +889,7 @@ function pendingTasks() { return tasks.filter(t => t.blob && t.status !== 'done'
 function paintSummary() {
   const shot = tasks.filter(t => t.thumb).length;
   $('tally').textContent = tasks.length ? '已拍 ' + shot + '/' + tasks.length : '';
+  $('tally').className = 'tally' + (tasks.length && shot === tasks.length ? ' full' : '');
   groups.forEach(g => {
     if (!g.nEl) return;
     const n   = g.tasks.filter(t => t.thumb).length;
@@ -774,12 +903,15 @@ function paintSummary() {
   const locked  = uploading || pending.length > 0;
   $('room').disabled  = locked;
   $('equip').disabled = locked || !$('room').value || $('equip').options.length < 2;
-  $('upAllBtn').disabled = !uploading && pending.length === 0;   // 上傳中保持醒目綠色（uploadAll 自己擋重複觸發）
+  $('upAllBtn').disabled = !uploading && pending.length === 0;   // 上傳中保持醒目（uploadAll 自己擋重複觸發）
   $('upAllBtn').classList.toggle('busy', uploading);
+  $('upAllBtn').setAttribute('aria-busy', uploading ? 'true' : 'false');
   if (!uploading) {
-    $('upAllTxt').textContent = pending.length
-      ? (failed ? '重新上傳（' : '全部上傳（') + pending.length + ' 張）' : '全部上傳';
+    setUpLabel(pending.length
+      ? (failed ? '重新上傳（' : '全部上傳（') + pending.length + ' 張）' : '全部上傳');
   }
+  paintProgress();                     // 上傳中：更新進度條與文字；沒在上傳：把進度還原
+
   $('clearBtn').hidden = uploading || !tasks.some(t => t.thumb);
 
   const msg = $('actMsg');
@@ -787,11 +919,38 @@ function paintSummary() {
   if (uploading) {
     msg.textContent = '上傳中請保持螢幕開啟，先不要離開這個頁面';
     msg.classList.add('warn');
+  } else if (pending.length) {
+    if (persistOK === false) {
+      msg.textContent = '這支手機無法暫存照片：請不要重新整理或離開頁面。上傳或清除後才能換設備';
+      msg.classList.add('warn');
+    } else {
+      msg.textContent = persistOK
+        ? '照片已暫存在這支手機，不小心重新整理也找得回來。上傳或清除後才能換設備'
+        : '有未上傳的照片，上傳或清除後才能換設備';
+    }
   } else {
-    msg.textContent = pending.length ? '有未上傳的照片，上傳或清除後才能換設備' : '';
+    msg.textContent = '';
   }
   $('actTop').hidden = !msg.textContent && $('clearBtn').hidden;
   updateStepper();
+}
+
+/* 「全部上傳」按鈕的文字與進度。按鈕上疊了兩層文字（底層深字、上層白字），兩層要一起改。
+ * 進度 = 已經處理完的張數 / 總張數（誠實：google.script.run 不提供傳輸中的位元組進度，
+ * 所以不假裝有；正在傳的那一張以斜紋動畫表示「在動」，並保底露出一小段）。 */
+function setUpLabel(txt) {
+  $('upAllTxt').textContent = txt;
+  $('upAllTxt2').textContent = txt;
+}
+function paintProgress() {
+  const b = $('upAllBtn');
+  if (!runState) { b.style.removeProperty('--p'); return; }
+  const r = runState;
+  const frac = r.finished ? 1 : r.done / r.total;
+  b.style.setProperty('--p', Math.max(frac, 0.06).toFixed(3));
+  setUpLabel(r.finished
+    ? '已全部歸檔 · 100%'
+    : (r.retry ? '重試中 ' : '上傳中 ') + Math.min(r.done + 1, r.total) + '/' + r.total + ' · ' + Math.round(frac * 100) + '%');
 }
 
 /* 「清除全部」：頁面裡的 confirm() 在 HtmlService 的 iframe 沙箱不一定能用，
@@ -811,7 +970,9 @@ $('clearBtn').onclick = () => {
     clearTimer = setTimeout(disarmClear, 4000);
     return;
   }
-  showList();   // 同一設備重新展開空白清單（showList 內會解除武裝）
+  const room = $('room').value, equip = $('equip').value;
+  // 暫存也要一起清：否則 showList() 馬上又把剛清掉的照片從暫存找回來
+  dropPhotos(room, equip, tasks.map(t => t.desc)).then(showList);   // showList 內會解除武裝
 };
 
 /* ============================================================
@@ -865,6 +1026,7 @@ function handleFile(file) {
   const t = pendingTask;
   pendingTask = null;
   if (!file || !t) return;
+  const room = $('room').value, equip = $('equip').value;   // ★v12.1★ 暫存要用「按下當下」的位置，不是處理完才讀
   try {
     console.log('[file] 選取：' + file.name + ' → ' + t.desc + '，' + (file.size / 1048576).toFixed(2) + ' MB，type=' + file.type);
 
@@ -885,7 +1047,8 @@ function handleFile(file) {
         t.shotYmd = r[0];
         t.blob = r[1].blob; t.thumb = r[1].thumb;
         t.cropText = r[1].cropText; t.cropBad = r[1].cropBad;
-        t.status = 'ready'; t.error = '';
+        t.status = 'ready'; t.error = ''; t.restored = false;
+        savePhoto(t, room, equip);      // ★v12.1★ 拍好立刻存進本機暫存（失敗不影響上傳）
       })
       .catch(err => {
         console.error('[file] 處理失敗：', err);
@@ -1006,6 +1169,120 @@ function makeThumb(src) {
 }
 
 /* ============================================================
+ * ★v12.1★ 照片暫存（IndexedDB）：不小心重新整理、手機回收頁面時，拍好還沒上傳的照片找得回來
+ *
+ * 為什麼不用 localStorage：
+ *   ① 容量只有約 5 MB，泰控「其他」45 張（合計十幾 MB）直接爆掉
+ *   ② 讀寫是同步的，會卡住畫面　③ 只能存字串，二進位要轉 base64（再多 33%）
+ * 為什麼存 ArrayBuffer 而不是 Blob：部分 iOS Safari 版本把 Blob 直接存進 IndexedDB 會失敗或讀回壞檔。
+ *
+ * 全部「盡力而為」：瀏覽器不支援、HtmlService 的 iframe 擋掉、容量滿了、寫入失敗……
+ * 都只是少了這層保護（persistOK=false，畫面上會明說），拍照與上傳照常運作。
+ * 規則：拍好 → 寫入；歸檔成功／清除全部 → 刪除；選到有暫存的設備 → 自動找回。
+ * ============================================================ */
+const DB_NAME = 'yofa-photo-queue', DB_STORE = 'photos';
+let dbPromise = null;
+let persistOK = null;      // null＝還沒寫過、true＝寫入成功、false＝不可用（畫面據此提示）
+
+function dbOpen() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE, { keyPath: 'id' });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+        req.onblocked = () => reject(new Error('IndexedDB blocked'));
+      } catch (e) { reject(e); }      // 無痕模式／沙箱不允許時，open 本身就會丟例外
+    });
+  }
+  return dbPromise;
+}
+
+function dbRun(mode, fn) {            // 在一個 transaction 裡跑 fn(store)，transaction 完成後回傳 fn 的結果
+  return dbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, mode);
+    const req = fn(tx.objectStore(DB_STORE));
+    tx.oncomplete = () => resolve(req && req.result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('transaction aborted'));
+  }));
+}
+
+const photoId = (room, equip, desc) => room + '|' + equip + '|' + desc;
+
+function blobToBuf(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload  = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error('照片讀取失敗'));
+    fr.readAsArrayBuffer(blob);
+  });
+}
+
+function savePhoto(t, room, equip) {
+  return blobToBuf(t.blob)
+    .then(buf => dbRun('readwrite', s => s.put({
+      id: photoId(room, equip, t.desc), room: room, equip: equip, desc: t.desc,
+      buf: buf, type: t.blob.type || 'image/jpeg', thumb: t.thumb,
+      shotYmd: t.shotYmd, cropText: t.cropText, cropBad: t.cropBad, ts: Date.now()
+    })))
+    .then(() => { persistOK = true; })
+    .catch(err => {
+      persistOK = false;
+      console.warn('[persist] 暫存失敗（不影響拍照與上傳）：', err && err.message ? err.message : err);
+    })
+    .then(paintSummary);              // 讓操作列的提示文字反映「已暫存」或「無法暫存」
+}
+
+/* 一律 resolve：刪不掉頂多下次多找回一張，不能卡住上傳佇列／清除按鈕（所以也設了 1.5 秒上限） */
+function dropPhotos(room, equip, descs) {
+  return Promise.race([
+    dbRun('readwrite', s => { descs.forEach(d => s.delete(photoId(room, equip, d))); })
+      .catch(err => { console.warn('[persist] 刪除暫存失敗：', err && err.message ? err.message : err); }),
+    sleep(1500)
+  ]);
+}
+
+function loadSaved() { return dbRun('readonly', s => s.getAll()).then(a => a || []); }
+
+/* 頁面一開：上次有拍好沒傳的照片，就自動回到那個機房／設備（showList 會把照片載回清單）。
+ * 只在師傅還沒自己選機房時動作，不搶操作。 */
+function restoreSaved() {
+  loadSaved().then(list => {
+    if (!list.length || $('room').value) return;
+    list.sort((a, b) => b.ts - a.ts);                          // 最近拍的那個設備優先
+    const r = list.find(x => MENU[x.room] && MENU[x.room][x.equip] && MENU[x.room][x.equip].some(i => i.desc === x.desc));
+    if (!r) return;                                            // 選單已經沒有這個項目（母版改過）→ 放不回清單，留著不動
+    $('room').value = r.room;   $('room').onchange({ target: $('room') });
+    $('equip').value = r.equip; $('equip').onchange({ target: $('equip') });
+  }).catch(err => console.warn('[persist] 讀取暫存失敗（不影響使用）：', err && err.message ? err.message : err));
+}
+
+/* 清單建好後，把這個機房／設備的暫存照片填回對應的項目（以 desc 對應） */
+function hydrate(seq) {
+  const room = $('room').value, equip = $('equip').value;
+  loadSaved().then(list => {
+    if (seq !== lookupSeq) return;                             // 已經換設備了，丟掉
+    let n = 0;
+    list.forEach(rec => {
+      if (rec.room !== room || rec.equip !== equip) return;
+      const t = tasks.find(x => x.desc === rec.desc);
+      if (!t || t.blob || t.busy) return;                      // 清單沒有這項、或師傅已經先拍了 → 不蓋掉
+      t.blob = new Blob([rec.buf], { type: rec.type || 'image/jpeg' });
+      t.thumb = rec.thumb || ''; t.shotYmd = rec.shotYmd || null;
+      t.cropText = rec.cropText || ''; t.cropBad = !!rec.cropBad;
+      t.status = 'ready'; t.restored = true;
+      paintTask(t); n++;
+    });
+    if (!n) return;
+    persistOK = true;                                          // 讀得到，代表暫存可用
+    paintSummary();
+    toast('已找回上次還沒上傳的 ' + n + ' 張照片', 'ok');
+  }).catch(err => console.warn('[persist] 找回暫存失敗（不影響使用）：', err && err.message ? err.message : err));
+}
+
+/* ============================================================
  * 批次上傳：一張接一張「依序」呼叫後端 uploadPhoto
  * ★不可改成並發★ uploadPhoto 內有 LockService（月初建分頁、建資料夾），
  * 同時送多張會互相等鎖，逾時後整批失敗。
@@ -1016,7 +1293,8 @@ function makeThumb(src) {
  * ④ payload 形狀與舊版單張上傳完全相同；item 一律是 MENU_TREE 的 desc（定位鍵），
  *    不是顯示用的 label（兩者在有「錯字」的項目上不一樣，見 CLAUDE.md P-4）
  * ⑤ 失敗的留在清單上可重傳；只有全部成功才清空，免得師傅在機房拍的照片白拍
- * ⑥ 連續 NET_FAIL_MAX 次「連線失敗」就暫停，別在斷網時一張張等逾時
+ * ⑥ 連續 NET_FAIL_MAX 張「連線失敗」就暫停，別在斷網時一張張等逾時
+ * ⑦ ★v12.1★ 每張失敗後最多自動重試 RETRY.max 次，但要先判斷重送會不會重複填格（見下方「失敗重試」）
  * ============================================================ */
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -1067,6 +1345,73 @@ function unlockScreen() {
   wakeLock = null;
 }
 
+/* ============================================================
+ * ★v12.1★ 失敗重試：每張最多自動重試 RETRY.max 次；失敗的標紅，不會中斷其他張
+ *
+ * 為什麼不能「失敗就無腦重送」：
+ *   後端 uploadPhoto 遇到「同名多槽位」的項目，是「填進第一個空格」。若第一次其實已經寫進去、
+ *   只是回應在半路掉了（連線失敗／逾時），再送一次就會把同一張照片重複填進「下一格」——
+ *   報表上多一張，而且不會跳任何錯誤。單槽位（Z 欄只出現一次）是直接覆蓋同一格，重送結果相同，安全。
+ * 所以只在「重送無害」時才自動重試：
+ *   ① 後端明確表示「寫入之前就擋下」的（傳輸不完整、打不開試算表）→ 重送
+ *   ② 連線失敗／系統忙碌（可能已寫入；後端把任何逾時都翻成「系統忙碌」）→ 只有確定是「單槽位」才重送
+ *   ③ 其餘（找不到定位鍵、槽位已滿、權限、用量…）重試也不會變好 → 不重試
+ * 多槽位、或雲端狀態不明（查詢失敗、後端沒更新）的項目，連線中斷時不自動重送：標紅留在清單上，由師傅決定。
+ * 刻意不做「前端逾時就放棄」：放棄的那一次其實還在後端跑，接著再送就變成同時兩個執行，
+ * 正是依序上傳要避免的情況。
+ * ============================================================ */
+const SAFE_RE = /傳輸不完整|無法開啟試算表/;
+const BUSY_RE = /系統忙碌/;
+
+function retryOK(t, res) {
+  const msg = res.error || '';
+  if (SAFE_RE.test(msg)) return true;
+  if (res.net || BUSY_RE.test(msg)) return !!(t.cloud && t.cloud.single);
+  return false;
+}
+
+/* 送一次。payload 形狀與 v11 單張上傳、v12 批次上傳完全相同；item 一律是 desc（定位鍵），不是顯示用的 label */
+async function sendOnce(t, room, equip) {
+  try {
+    const dataUrl = await blobToDataUrl(t.blob);   // 每次嘗試才轉 base64，用完即丟
+    console.log('[upload] 開始上傳：' + room + ' / ' + equip + ' / ' + t.desc + (t.attempt ? '（第 ' + t.attempt + ' 次重試）' : ''));
+    return await runUpload({
+      room: room,
+      equip: equip,
+      item: t.desc,
+      // ★v6 A 方案★ Drive 資料夾年月：有拍攝日用拍攝日，否則用上傳當天
+      ym: t.shotYmd ? ymFromYmd(t.shotYmd) : nowYm(),
+      shotYmd: t.shotYmd || '',   // 後端據此決定施工/完工日期與月份分頁
+      dataUrl: dataUrl
+    });
+  } catch (err) {
+    console.error('[upload] 上傳前處理失敗：', err);
+    return { ok: false, error: '照片讀取失敗，請重拍這一張' };
+  }
+}
+
+async function sendWithRetry(t, room, equip, onRetry) {
+  t.attempt = 0;                                   // 已自動重送幾次（畫面上「重試中（第 n 次）」用）
+  for (;;) {
+    const res = await sendOnce(t, room, equip);
+    if (res.ok || t.attempt >= RETRY.max) return res;
+    if (!retryOK(t, res)) {
+      const unsure = !!res.net || BUSY_RE.test(res.error || '');
+      return unsure
+        ? Object.assign({}, res, { error: res.error + '（不確定有沒有寫進去，為避免重複填格，沒有自動重送）' })
+        : res;
+    }
+    const wait = BUSY_RE.test(res.error || '') ? RETRY.busy : RETRY.wait[t.attempt];
+    t.attempt++;
+    onRetry(t.attempt);                            // 先把「重試中」亮出來，再等
+    await sleep(wait);
+  }
+}
+
+/* ============================================================
+ * 整批上傳：一張接一張「依序」處理（不可並發，原因見上方批次上傳說明）
+ * 失敗的標紅、留在清單，不影響後面的張數；只有連續 NET_FAIL_MAX 張都「連線失敗」才暫停（網路真的斷了）。
+ * ============================================================ */
 async function uploadAll() {
   if (uploading) return;
   const queue = pendingTasks();
@@ -1074,49 +1419,38 @@ async function uploadAll() {
   const room = $('room').value, equip = $('equip').value;   // 上傳期間下拉已鎖住，這裡先存起來更保險
 
   uploading = true;
+  runState = { total: queue.length, done: 0, retry: 0, finished: false };
   tasks.forEach(paintTask);          // 上傳期間所有「拍照/選圖」按鈕鎖住
   paintSummary();
-  $('prog').hidden = false;
-  $('progFill').style.width = '4%';
   lockScreen();
 
   let okN = 0, netFail = 0, aborted = false;
   for (let i = 0; i < queue.length; i++) {
     const t = queue[i];
-    $('upAllTxt').textContent = '正在上傳 ' + (i + 1) + '/' + queue.length + '…';
     t.status = 'uploading'; t.error = '';
     paintTask(t);
+    paintSummary();
 
-    let res;
-    try {
-      const dataUrl = await blobToDataUrl(t.blob);   // 上傳當下才轉 base64，用完即丟
-      console.log('[upload] 開始上傳：' + room + ' / ' + equip + ' / ' + t.desc);
-      res = await runUpload({
-        room: room,
-        equip: equip,
-        item: t.desc,
-        // ★v6 A 方案★ Drive 資料夾年月：有拍攝日用拍攝日，否則用上傳當天
-        ym: t.shotYmd ? ymFromYmd(t.shotYmd) : nowYm(),
-        shotYmd: t.shotYmd || '',   // 後端據此決定施工/完工日期與月份分頁
-        dataUrl: dataUrl
-      });
-    } catch (err) {
-      console.error('[upload] 上傳前處理失敗：', err);
-      res = { ok: false, error: '照片讀取失敗，請重拍這一張' };
-    }
+    const res = await sendWithRetry(t, room, equip, n => {
+      runState.retry = n;
+      paintTask(t);
+      paintSummary();
+    });
+    runState.retry = 0;
 
     if (res.ok) {
-      t.status = 'done'; t.blob = null;          // 釋放這張的 Blob；縮圖留著給師傅對照
+      t.status = 'done'; t.blob = null;           // 釋放這張的 Blob；縮圖留著給師傅對照
       t.where = shortWhere(res.where);
+      await dropPhotos(room, equip, [t.desc]);    // 已歸檔 → 從暫存拿掉，免得重新整理後又冒出來被重傳
       okN++; netFail = 0;
       console.log('[upload] 成功：' + (res.name || t.desc) + '（本次第 ' + (uploadedCount + okN) + ' 張）');
     } else {
       t.status = 'failed';
-      t.error = res.error || '後端回傳格式異常';
+      t.error = (res.error || '後端回傳格式異常') + (t.attempt ? '（已自動重試 ' + t.attempt + ' 次）' : '');
       netFail = res.net ? netFail + 1 : 0;
       console.error('[upload] 失敗：' + t.desc, res);
     }
-    $('progFill').style.width = Math.max(4, Math.round((i + 1) / queue.length * 100)) + '%';
+    runState.done++;
     paintTask(t);
     paintSummary();
     if (netFail >= NET_FAIL_MAX) { aborted = true; break; }
@@ -1131,12 +1465,16 @@ async function uploadAll() {
 
   const left = pendingTasks().length;
   if (left === 0) {
+    runState.finished = true;        // 按鈕顯示「已全部歸檔 · 100%」停一下，讓師傅看到最後一個打勾
+    paintSummary();
     toast('已全部歸檔，共 ' + okN + ' 張', 'ok');
-    await sleep(1200);               // 讓師傅看到最後一個打勾，再清空
+    await sleep(1200);
     uploading = false;
+    runState = null;
     showList();                      // 同一設備重新展開空白清單，並重新查雲端狀態
   } else {
     uploading = false;
+    runState = null;
     const failN = tasks.filter(t => t.status === 'failed').length;
     groups.forEach(g => { if (g.el && g.tasks.some(t => t.status === 'failed')) g.el.open = true; });
     toast(aborted
@@ -1145,26 +1483,50 @@ async function uploadAll() {
     tasks.forEach(paintTask);
     paintSummary();
   }
-  $('prog').hidden = true;
 }
 $('upAllBtn').onclick = uploadAll;
 
+/* ★v12.1★ 離開頁面前的最後一道防線：還有沒傳完的照片時，瀏覽器會先跳出「確定要離開？」。
+ * 盡力而為——HtmlService 的 iframe 沙箱與手機瀏覽器可能直接忽略它；真正的保護是上面的暫存。 */
+window.addEventListener('beforeunload', e => {
+  if (!uploading && pendingTasks().length === 0) return;
+  e.preventDefault();
+  e.returnValue = '';              // 舊版瀏覽器需要這行才會跳出確認
+});
+
+/* 切去別的 App 再回來：螢幕鎖（wakeLock）會被系統收回，上傳還在跑就重新要一次 */
+document.addEventListener('visibilitychange', () => {
+  if (uploading && document.visibilityState === 'visible') lockScreen();
+});
+
 /* ============================================================
- * Toast 提示
+ * Toast 提示（取代 alert()：不會卡住頁面、不依賴 HtmlService 沙箱是否允許跳窗）
+ * 從頁面上緣滑下，不會跟底部操作列重疊；toast 本身不攔截點擊（才不會蓋住底下的下拉選單），只有右側 × 可按；成功 4.5 秒、錯誤 8 秒自動收。
  * 修正舊版 bug：連續彈兩次 toast 時，第一次的 setTimeout 到點會把
  * 「第二則還在顯示的訊息」提前關掉。改為記住計時器並先清除。
  * ============================================================ */
+const TOAST_SVG = {
+  ok:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  err:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v8"/><path d="M12 18h.01"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v6"/><path d="M12 7h.01"/></svg>'
+};
 let toastTimer = null;
+function hideToast() {
+  const t = $('toast');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = null;
+  t.className = t.className.replace('show', '').trim();
+}
 function toast(msg, type) {
   const t = $('toast');
   if (toastTimer) clearTimeout(toastTimer);
-  t.textContent = msg;
+  $('toastTx').textContent = msg;
+  $('toastIc').innerHTML = TOAST_SVG[type] || TOAST_SVG.info;
+  $('toastBody').setAttribute('role', type === 'err' ? 'alert' : 'status');   // 錯誤訊息要螢幕報讀立刻唸
   t.className = 'show ' + (type || '');
-  toastTimer = setTimeout(() => {
-    t.className = t.className.replace('show', '').trim();
-    toastTimer = null;
-  }, 8000);
+  toastTimer = setTimeout(hideToast, type === 'err' ? 8000 : 4500);
 }
+$('toastX').onclick = hideToast;
 </script>
 </body>
 </html>
