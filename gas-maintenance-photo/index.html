@@ -437,7 +437,7 @@ html.lite .lyr-on::before,html.lite .shot-skel::after{animation:none}
       <b>佑發 · 保養拍照</b>
       <span>高速公路局北區養護工程分局</span>
     </div>
-    <div class="ver">v12.1</div>
+    <div class="ver">v12.1.1</div>
   </div>
 
   <!-- 步驟指示：讓師傅隨時知道進行到哪 -->
@@ -555,6 +555,36 @@ let uploading = false;
 let lookupSeq = 0;        // 雲端狀態查詢的序號：換設備後，舊查詢的回應一律丟棄
 let wakeLock = null;
 let runState = null;      // ★v12.1★ 上傳進行中的進度 { total, done, retry, finished }；沒在上傳時是 null
+
+/* toast 要用的兩個宣告放在最上面：載入途中出錯時，下面的全域錯誤提示也要能呼叫 toast */
+const TOAST_SVG = {
+  ok:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  err:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v8"/><path d="M12 18h.01"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v6"/><path d="M12 7h.01"/></svg>'
+};
+let toastTimer = null;
+
+/* ============================================================
+ * ★v12.1.1★ 全域錯誤提示：現場的人看不到 Console，畫面程式一出錯就只剩「按了沒反應」。
+ * 把沒被接住的例外用 toast 秀出來（只有訊息，不含堆疊與網址），請他截圖回報。
+ * 濾掉瀏覽器與外層的無意義雜訊；20 秒內最多一則，免得連環出錯洗版。
+ * 涵蓋範圍：載入完成之後與載入途中的執行期錯誤；語法錯誤整支 script 都不會執行，這裡救不了。
+ * ============================================================ */
+let lastErrToast = 0;
+function reportError(msg) {
+  msg = String(msg || '').replace(/https?:\/\/\S+/g, '').trim();
+  if (!msg || /^Script error\.?$|ResizeObserver/i.test(msg)) return;
+  console.error('[error] 沒被接住的錯誤：', msg);
+  if (Date.now() - lastErrToast < 20000) return;
+  lastErrToast = Date.now();
+  try {
+    toast('畫面程式出了點問題：' + msg.slice(0, 80) + '（請截圖給管理者）', 'err');
+  } catch (e) {
+    console.error('[error] 連提示都顯示不出來：', e);
+  }
+}
+window.addEventListener('error', e => reportError(e.message));
+window.addEventListener('unhandledrejection', e => reportError(e.reason && e.reason.message ? e.reason.message : e.reason));
 
 /* ============================================================
  * ★v10★ 步驟指示器
@@ -748,8 +778,6 @@ function showList() {
     }));
     groups = makeGroups(tasks);
     renderList();
-    lookupFilled();
-    hydrate(lookupSeq);      // ★v12.1★ 把這個設備的暫存照片填回清單
   } else if (equip) {
     console.warn('[menu] 設備「' + equip + '」底下沒有檢查項目');
     toast('此設備沒有檢查項目，請檢查選單來源', 'err');
@@ -758,6 +786,13 @@ function showList() {
   $('listCard').hidden = !show;
   $('actBar').hidden = !show;
   paintSummary();
+  if (show) {
+    /* 這兩個是「背景功能」（查雲端已有、找回暫存）：不管出什麼錯，都不能擋住清單。
+     * 所以排在清單顯示「之後」，並各自接住例外。v12.1 上線時踩過：後端還沒更新、沒有 getFilledSlots，
+     * lookupFilled 在呼叫那一行同步丟 TypeError，例外穿過這個函式，清單與操作列永遠沒顯示（見 CLAUDE.md P-21）。 */
+    try { lookupFilled(); } catch (err) { console.error('[lookup] 失敗（不影響拍照與上傳）：', err); }
+    try { hydrate(lookupSeq); } catch (err) { console.error('[persist] 找回失敗（不影響使用）：', err); }   // ★v12.1★ 把這個設備的暫存照片填回清單
+  }
 }
 
 /* ============================================================
@@ -985,18 +1020,25 @@ function lookupFilled() {
   const note = $('cloudNote');
   note.hidden = false;
   note.textContent = '正在查詢雲端已有的照片…';
-  const fail = () => { if (seq === lookupSeq) note.textContent = '雲端狀態查詢失敗（不影響拍照與上傳）'; };
-  google.script.run
-    .withSuccessHandler(res => {
-      if (seq !== lookupSeq) return;             // 已經換設備了，丟掉舊回應
-      if (!res || !res.ok) { console.warn('[lookup] 後端回報失敗：', res); fail(); return; }
-      tasks.forEach(t => { t.cloud = (res.slots && res.slots[t.desc]) || null; paintTask(t); });
-      note.textContent = res.exists
-        ? '雲端狀態查自本月分頁 ' + res.tab + '，補拍上個月的照片時僅供參考'
-        : '本月分頁 ' + res.tab + ' 還沒建立，第一張上傳時會自動建立';
-    })
-    .withFailureHandler(err => { console.warn('[lookup] 呼叫失敗：', err); fail(); })
-    .getFilledSlots(room, tasks.map(t => t.desc));
+  const fail = msg => { if (seq === lookupSeq) note.textContent = msg || '雲端狀態查詢失敗（不影響拍照與上傳）'; };
+  try {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (seq !== lookupSeq) return;             // 已經換設備了，丟掉舊回應
+        if (!res || !res.ok) { console.warn('[lookup] 後端回報失敗：', res); fail(); return; }
+        tasks.forEach(t => { t.cloud = (res.slots && res.slots[t.desc]) || null; paintTask(t); });
+        note.textContent = res.exists
+          ? '雲端狀態查自本月分頁 ' + res.tab + '，補拍上個月的照片時僅供參考'
+          : '本月分頁 ' + res.tab + ' 還沒建立，第一張上傳時會自動建立';
+      })
+      .withFailureHandler(err => { console.warn('[lookup] 呼叫失敗：', err); fail(); })
+      .getFilledSlots(room, tasks.map(t => t.desc));
+  } catch (err) {
+    /* 後端還沒更新到有 getFilledSlots 的版本：google.script.run 在「呼叫那一行」就同步丟 TypeError
+     * （…getFilledSlots is not a function），不會進 withFailureHandler。 */
+    console.warn('[lookup] 後端沒有 getFilledSlots：', err);
+    fail('後端還沒更新到新版：看不到「雲端已有」提示，連線不穩時也不會自動重試（拍照與上傳照常）');
+  }
 }
 
 /* ============================================================
@@ -1505,12 +1547,6 @@ document.addEventListener('visibilitychange', () => {
  * 修正舊版 bug：連續彈兩次 toast 時，第一次的 setTimeout 到點會把
  * 「第二則還在顯示的訊息」提前關掉。改為記住計時器並先清除。
  * ============================================================ */
-const TOAST_SVG = {
-  ok:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
-  err:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v8"/><path d="M12 18h.01"/></svg>',
-  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v6"/><path d="M12 7h.01"/></svg>'
-};
-let toastTimer = null;
 function hideToast() {
   const t = $('toast');
   if (toastTimer) clearTimeout(toastTimer);
