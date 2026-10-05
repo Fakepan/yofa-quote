@@ -27,18 +27,19 @@
 
 | 角色 | 檔案 | 做什麼 |
 |---|---|---|
-| 手機前端 | `index.html`（約 900 行） | 師傅操作：三層選單 → 拍照 → 壓縮 → 送出 |
-| GAS 後端 | `程式碼.gs`（約 1000 行，19 個函式） | `doGet` 送出網頁；`uploadPhoto` 處理每一張上傳 |
+| 手機前端 | `index.html`（約 1170 行） | 師傅操作：機房 → 設備 → **該設備全部檢查項目的清單**，逐項拍照 → 壓縮 → 一次依序送出 |
+| GAS 後端 | `程式碼.gs`（約 1100 行，21 個函式） | `doGet` 送出網頁；`uploadPhoto` 處理每一張上傳；`getFilledSlots` 唯讀查雲端已有照片 |
 | 資料落點 | Google 雲端 | 母版試算表 + Drive 備份資料夾 |
 
 ## 一張照片的完整路徑
 
-**前端**（`index.html`）
-1. 三層連動選單：機房 → 設備 → 項目（資料來自後端 `getMenu()` 回傳的 `MENU_TREE`）
-2. 拍照或從相簿選（時間相機 App 拍的要走「相簿」才保得住浮水印）
-3. `parseExifDate()` 讀 EXIF tag `0x9003` 取拍攝日 → 決定月份分頁與施工/完工日期
-4. `compress()` 用 Canvas **Contain 等比縮放 + 白色補邊**到 `MAX_SIDE=1024`、比例 404:330、`JPEG_Q=0.75`
-5. `toDataURL` 轉 base64 → `google.script.run.uploadPhoto(payload)`
+**前端**（`index.html`，v12 起為清單式批次上傳）
+1. 選機房 → 選設備；設備一選好，就依 `MENU_TREE` 把該設備**全部檢查項目**展開成清單（`showList` → `renderList`）。項目超過 12 個（泰控「其他」45 項）才依「之N」「組號」分組並預設收合，其餘 105 個設備平鋪
+2. 每一項各有「拍照/選圖」：一個共用的 `<input type=file>`（不加 `capture`），用 `pendingTask` 記住是哪一項按的。時間相機 App 拍的要走相簿才保得住浮水印
+3. `parseExifDate()` 讀 EXIF tag `0x9003` 取拍攝日（每一張各自一個）→ 決定月份分頁與施工/完工日期
+4. `compress()` 用 Canvas **Contain 等比縮放 + 白色補邊**到 `MAX_SIDE=1024`、比例 404:330、`JPEG_Q=0.75`；輸出 **Blob + 160px 縮圖**（見 P-15），壓縮一張接一張排隊（共用同一張 `#cv`）
+5. 選好設備時背景呼叫 `getFilledSlots` 標示「雲端已有」（查詢失敗只是少了標示，不影響上傳）
+6. 「全部上傳」→ `uploadAll()` **一張接一張依序** `google.script.run.uploadPhoto(payload)`（見 P-14）；payload 形狀與舊版單張完全相同，`item` 一律是 `desc`。失敗的留在清單上可重傳（P-16）；連續 3 次連線失敗就暫停
 
 **後端**（`程式碼.gs` 的 `uploadPhoto()`，這是唯一的熱路徑）
 
@@ -77,9 +78,9 @@
 | 月份分頁（`YYYYMM`，純 6 位數） | 該月實際報表與照片 | 是**複製當下的快照**，模板後來新增的項目救不回來（P-10） |
 | Drive 備份資料夾 | 原圖，依 `年月/機房/` 分層 | 設為公開可讀，CellImage 才顯示得出來；權限改掉照片全變破圖 |
 
-## 19 個函式分兩類
+## 21 個函式分兩類
 
-**自動跑的（師傅按上傳就會走到）**：`doGet`、`getMenu`、`uploadPhoto`、`getOrCreateMonthSheet_`、`backupAndGetId_`、`getOrCreate_`、`rebuildZColumnFor_`、`validateJpegBytes_`
+**自動跑的（師傅操作就會走到）**：`doGet`、`getMenu`、`uploadPhoto`、`getOrCreateMonthSheet_`、`backupAndGetId_`、`getOrCreate_`、`rebuildZColumnFor_`、`validateJpegBytes_`；唯讀的 `getFilledSlots`（選好設備時查一次）與它的 `locateSlotRows_`
 
 **手動執行的工具（在 GAS 編輯器選函式跑，不需重新部署）**：
 `buildZColumn`、`rebuildZColumnEverywhere`、`newMonthCopy`、`clearTemplatePhotos`、`normalizeTemplateLayout`(+Part1/Part2/`normalizeLayout_`)、`auditMenuVsMaster`、`auditAllMonthTabs`、`diagTest`
@@ -95,6 +96,8 @@
   2. 步驟 7 `backupAndGetId_()` —— 每張都重新解析年月/機房資料夾，連拍十張就解析十遍
   3. 步驟 4 `Z:Z` TextFinder —— 整欄掃描
   4. 步驟 2 `openById` —— 80 MB 母版
+- **批次上傳不減少傳輸量**：同樣的位元組、同樣的連線，依序送還是一樣的總時間。省下的是師傅**站著等的時間**（連拍完按一次就能走開），不是變快。
+- **`getFilledSlots` 的代價尚未實測**：選好設備時多一趟 `openById`（80 MB 母版）＋4 次讀取，預期 1～2 秒（**估計值，沒有實測**）。它在背景跑、不擋拍照；執行記錄會印 `[getFilledSlots] … 耗時 N ms`，貼回來才知道真實數字。
 - **量測方式**：`uploadPhoto()` 已內建階段計時（v4.7），執行記錄會印
   `[uploadPhoto] 階段耗時(ms) 解碼驗證:xx｜開啟試算表:xx｜…`，**最大的那一項就是瓶頸**。
   優化前先看這行數字，不要憑猜測改。
@@ -207,6 +210,14 @@ Z 欄（第 26 欄）存放定位鍵 `機房__設備+項目說明`，`uploadPhot
 - 【MUST P-12】**一律 Contain ＋ 白色留白，絕不可改成 Cover 裁切。** 時間相機浮水印在左上（GPS 地圖）與右上（時間戳），被裁掉會**送審退件**。實作見 `index.html` 的 `Math.min(outW/iw, outH/ih, 1)` ＋ `fillStyle` 白底（JPEG 無透明通道）。
 - 照片格規格：A~D 共 4 欄 × 101px = 404px，跨 10 列 × 33px = 330px（比例約 1.224）。
 - 施工／完工日期取自照片 EXIF 拍攝時間（tag `0x9003`），月份分頁與 Drive 資料夾也依此決定。
+
+### 批次上傳（v12 清單式前端）
+
+- 【MUST P-14】**批次上傳一律「依序」呼叫 `uploadPhoto`，不可改成並發。** `uploadPhoto` 內有 LockService（月初建分頁、建資料夾），同時送多張會互相等鎖，逾時後整批失敗。想加速請先看階段計時找真正的瓶頸，不要用平行化硬解。
+- 【MUST P-15】**清單裡的照片只存「壓縮後的 Blob ＋ 小縮圖」，不可改回存 dataURL。** 泰控「其他」一次最多 45 張；dataURL 當預覽時，每張解碼後的點陣圖約 3.4 MB，45 張約 150 MB（**依 1024×836×4 bytes 推算，未實機量測**），舊手機會當掉。上傳當下才把該張 Blob 轉 base64，傳完立刻釋放。
+- 【MUST P-16】**上傳後只能清掉「成功」的項目，失敗的必須留在清單上。** 師傅在機房拍的照片，不能因為其中幾張失敗就整批消失。只有全部成功才重置清單。
+- 【MUST P-17】**`getFilledSlots` 的「錨點校正」與「已填判定」必須與 `uploadPhoto` 步驟 4 同步修改。** 兩邊不同步，前端就會擋掉其實能傳的、或放行會失敗的。注意：`uploadPhoto` 對**單槽位**（Z 欄只命中一次）是**直接覆蓋**、不檢查是否已填；只有**多槽位**才會回「槽位已滿」。所以前端只對多槽位全滿鎖住按鈕，單槽位已有照片只提醒「再傳會覆蓋」。它僅供參考：補傳上月照片時 `uploadPhoto` 會依 EXIF 寫進別的分頁，而它查的是本月。
+- 清單的 `item` 一律送 `desc`（定位鍵），**不是 `label`**——兩者在有「錯字」的項目上不同（見 P-4）。
 
 ### Google Sheets 的坑
 

@@ -62,6 +62,100 @@ function doGet() {
 function getMenu() { return MENU_TREE; }
 
 /**
+ * ★v4.8★ 唯讀：查某機房的一批定位鍵，在「本月分頁」各有幾個照片格、已經放了幾張。
+ * 供前端清單標示「雲端已有」。只讀不寫、不加鎖，與 uploadPhoto 互不影響。
+ *
+ * 判定規則刻意比照 uploadPhoto，兩邊必須同步修改：
+ *   · 照片格位置：鍵所在列 +1，再用合併儲存格錨點校正（P-7）
+ *   · 已填：值是物件（CellImage）或帶公式；「照片」佔位字視為空格（P-8）
+ *   · single：該鍵在 Z 欄只出現一次 → uploadPhoto 直接覆蓋、不檢查是否已填
+ * 僅供參考：補傳上月照片時 uploadPhoto 會依 EXIF 拍攝日寫進別的分頁，這裡查的是本月。
+ * 批次讀取：不論 descs 有幾個，API 呼叫次數固定（Z 欄只讀一次）。
+ */
+function getFilledSlots(room, descs) {
+  const t0 = Date.now();
+  try {
+    if (!room || !Array.isArray(descs) || descs.length === 0) {
+      return { ok: false, error: '參數不完整' };
+    }
+    const tab = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM');
+    const sh  = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName(tab);
+    if (!sh || sh.getLastRow() < 1) return { ok: true, tab: tab, exists: false, slots: {} };
+
+    const found = locateSlotRows_(sh, room, descs);
+    const descKeys = Object.keys(found.slotRows);
+    if (descKeys.length === 0) return { ok: true, tab: tab, exists: true, slots: {} };
+
+    // 照片格所在的 A 欄範圍一次讀入（值＋公式），再逐格判斷是否已有照片
+    let top = Infinity, bot = 0;
+    descKeys.forEach(function (d) {
+      found.slotRows[d].forEach(function (r) { top = Math.min(top, r); bot = Math.max(bot, r); });
+    });
+    const rng  = sh.getRange(top, 1, bot - top + 1, 1);
+    const vals = rng.getValues();
+    const fmls = rng.getFormulas();
+
+    const slots = {};
+    descKeys.forEach(function (d) {
+      let used = 0;
+      found.slotRows[d].forEach(function (r) {
+        const v = vals[r - top][0];
+        if ((v !== null && typeof v === 'object') || fmls[r - top][0] !== '') used++;
+      });
+      slots[d] = { total: found.slotRows[d].length, used: used, single: found.keyCount[d] === 1 };
+    });
+    console.log('[getFilledSlots] ' + room + '，' + descs.length + ' 項，' + tab + '，耗時 ' + (Date.now() - t0) + ' ms');
+    return { ok: true, tab: tab, exists: true, slots: slots };
+  } catch (err) {
+    console.error('[getFilledSlots] 失敗：' + err + (err && err.stack ? '\n' + err.stack : ''));
+    return { ok: false, error: '無法查詢雲端照片狀態' };
+  }
+}
+
+/**
+ * getFilledSlots 的定位部分：Z 欄一次讀入找出各定位鍵所在列，
+ * 再把「鍵的下一列」用合併儲存格錨點校正成照片格起始列（與 uploadPhoto 步驟 4 同一規則）。
+ * 回傳 keyCount（Z 欄原始命中次數）與 slotRows（校正並去重後的照片格列）。
+ */
+function locateSlotRows_(sh, room, descs) {
+  const want = Object.create(null);
+  descs.forEach(function (d) { want[room + '__' + d] = String(d); });
+
+  const z = sh.getRange(1, Z_COL, sh.getLastRow(), 1).getDisplayValues();
+  const below = {};   // desc → 鍵的下一列（1-based）清單
+  let lo = Infinity, hi = 0;
+  for (let i = 0; i < z.length; i++) {
+    const d = want[z[i][0]];
+    if (d === undefined) continue;
+    (below[d] = below[d] || []).push(i + 2);
+    lo = Math.min(lo, i + 2); hi = Math.max(hi, i + 2);
+  }
+  const keyCount = {}, slotRows = {};
+  if (hi === 0) return { keyCount: keyCount, slotRows: slotRows };
+
+  // 只查用得到的那一段 A 欄的合併範圍；範圍只取起訖列，避免對每個範圍反覆呼叫 API
+  const spans = sh.getRange(lo, 1, hi - lo + 1, 1).getMergedRanges()
+    .map(function (m) { return [m.getRow(), m.getLastRow()]; });
+  const anchorOf = function (row) {
+    for (let k = 0; k < spans.length; k++) {
+      if (spans[k][0] <= row && row <= spans[k][1]) return spans[k][0];
+    }
+    return row;
+  };
+
+  Object.keys(below).forEach(function (d) {
+    const seen = {}, rows = [];
+    below[d].forEach(function (r) {
+      const a = anchorOf(r);
+      if (!seen[a]) { seen[a] = true; rows.push(a); }   // 校正後指向同一格只算一個槽位
+    });
+    keyCount[d] = below[d].length;
+    slotRows[d] = rows;
+  });
+  return { keyCount: keyCount, slotRows: slotRows };
+}
+
+/**
  * 師傅上傳一張 → Drive 備份 + 試算表寫入 CellImage
  */
 function uploadPhoto(p) {

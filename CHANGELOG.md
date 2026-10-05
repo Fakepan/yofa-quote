@@ -78,3 +78,65 @@
 
 **尚未驗證**
 這節的實用性要等下一個 session 實際使用才知道。若發現仍需補充，直接增修本節。
+
+---
+
+## 2026-10-05 — 前端改為「清單式批次上傳」＋ 後端新增唯讀 `getFilledSlots`（v12）
+
+**為什麼**
+現場流程是「選項目 → 拍 → 傳 → 站著等約 5 秒 → 再選下一項」，一個設備 5～8 項就要重複 5～8 輪。
+改成選好設備後直接列出全部檢查項目、逐項拍照、最後按一次依序上傳。
+**批次上傳不會減少網路傳輸量**；省下的是師傅站著等的時間（連拍完按一次就能走開）。
+
+**改了什麼**
+- `gas-maintenance-photo/index.html`（主要）
+  - 拿掉「檢查項目」下拉與單張預覽卡；設備選好後依 `MENU_TREE` 展開該設備全部項目成清單，每項有「拍照/選圖」、縮圖、狀態圓點
+  - 項目 >12 才分組並預設收合（只有泰控「其他」45 項：依「之N」「組號」分成 12 組）；其餘 105 個設備平鋪
+  - 照片存 **Blob ＋ 160px 縮圖**，不再存整張 dataURL；壓縮改為一張接一張排隊（共用 `#cv`）
+  - 「全部上傳」依序呼叫 `uploadPhoto`（不並發）；失敗的留在清單可重傳，全部成功才重置；連續 3 次連線失敗暫停
+  - 選好設備時背景查 `getFilledSlots`，標示「雲端已有」；多槽位全滿才鎖按鈕，單槽位只提醒「再傳會覆蓋」
+  - 底部黏底操作列顯示進度（`正在上傳 i/N…`＋進度條）；有未上傳照片或上傳中，機房/設備下拉鎖住；「清除全部」兩段式確認（HtmlService 沙箱不保證能用 `confirm()`）
+  - 版本標籤 v11 → v12（讓現場看得出新版有沒有部署成功）
+  - 圖示沿用既有 SVG 風格，未使用 emoji
+- `gas-maintenance-photo/程式碼.gs`：**僅新增** `getFilledSlots`、`locateSlotRows_`（94 行，0 刪除）
+- `CLAUDE.md`：架構節同步為清單式流程；新增 P-14～P-17
+
+**刻意沒動**
+- `uploadPhoto()` 與其餘 18 個既有後端函式：逐位元組相同（SHA256 `b2d1e8ae…` 與 HEAD 一致）
+- `MENU_TREE`、Z 欄定位（P-6 `findAll`、P-7 合併錨點）、Google Sheets 任何格式／欄位／排版（P-1）
+- Contain＋白底（P-12）、`MAX_SIDE`／`JPEG_Q`／`BOX_RATIO` 常數
+- `parseExifDate`、`sortEquipKeys`、`nowYm`、`ymFromYmd`、`toast` 等 8 個前端函式：逐位元組相同
+- payload 形狀與舊版單張上傳完全相同（`room/equip/item/ym/shotYmd/dataUrl`），`item` 一律是 `desc`
+
+**影響範圍**
+前端整個互動流程。後端寫入路徑零改動；新增的 `getFilledSlots` 只讀不寫、不加鎖。
+
+**驗證輸出**
+```
+✅ node --check：程式碼.gs、index.html 內嵌 script 皆 PASS
+✅ MENU_TREE：機房 17｜項目 666｜與 HEAD 逐機房比對差異 0 個
+✅ uploadPhoto SHA256：HEAD b2d1e8ae4f8d／現在 b2d1e8ae4f8d（相同）
+✅ 既有 19 個後端函式逐位元組相同；前端 8 個沿用函式逐位元組相同
+✅ git diff（程式碼.gs）：+94／-0，單一 hunk 位於 getMenu 之後
+✅ 前端離線實測（headless Chromium＋假的 google.script.run＋真的 MENU_TREE）：72/72 通過
+   · 105/106 設備平鋪、泰控「其他」45 項分 12 組（7,7,5,2,3×8）
+   · 依序上傳：最大並發 1、順序＝清單順序、payload 欄位同舊版、dataUrl 通過 validateJpegBytes_ 同等檢查
+   · desc≠label 的三項（-CHU-03…、:CTR-02…、冷卻水加藥設備檢查檢查之2）送出的都是 desc
+   · Contain：橫拍/直拍的紅(左上)、藍(右上)角落像素都在，上下或左右為純白
+   · 部分失敗：失敗項保留、成功項不重送；斷網 3 次連續失敗後暫停，其餘維持 ready
+   · 45 張處理後，強制 GC 後 JS heap 僅 +0.10 MB（Blob 合計 12.9 MB 不在 JS heap）
+✅ 後端差異測試（模擬 GAS 服務，跑真正的原始碼）：18/18 通過
+   · 11 種槽位情境下，前端依 getFilledSlots 的判斷（擋／覆蓋／填下一格）與 uploadPhoto 實際行為一致
+   · API 呼叫次數與項目數無關：5 項與 45 項皆 getRange×3、getMergedRanges×1、TextFinder×0
+```
+
+**尚未端到端驗證**（需要業主實機）
+- 沒有在真的 GAS／Google Sheets／手機上跑過；以上都是離線模擬。模擬的是 `uploadPhoto` 用到的 API 語意，不是真的 Sheets
+- `getFilledSlots` 在 80 MB 母版上的實際耗時未知（預期 1～2 秒是估計值）；上線後看執行記錄的 `[getFilledSlots] … 耗時 N ms`
+- 手機上「拍照/選圖」單一按鈕（無 `capture`）的實際選單長相，依機型而異
+- `navigator.wakeLock` 在 HtmlService iframe 內可能被拒絕（已 try/catch，失敗只是少一層保護）
+- 頁面被重新整理或手機回收頁面時，尚未上傳的照片會遺失（未做 IndexedDB 暫存）
+
+**部署**
+`index.html` 與 `程式碼.gs` **兩個都要**貼進「高公局空調報表自動化」獨立網頁 App 專案（有 `doGet` 的那個），再「部署新版本」。
+只貼 `index.html` 也能用（查雲端狀態會顯示「查詢失敗」但不影響拍照上傳）。

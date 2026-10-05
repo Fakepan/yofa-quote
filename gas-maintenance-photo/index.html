@@ -160,20 +160,6 @@ select:disabled{
 }
 select.filled{border-color:var(--navy-soft);font-weight:600}
 
-/* ---------- 即將拍攝確認條 ---------- */
-.slot{
-  display:none;margin-bottom:14px;
-  background:var(--amber-soft);border:1px solid rgba(194,113,12,.28);
-  border-left:4px solid var(--amber);
-  border-radius:var(--r-md);padding:12px 14px;
-}
-.slot-l{
-  display:flex;align-items:center;gap:6px;
-  font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--amber);
-  margin-bottom:4px;
-}
-.slot b{display:block;font-size:16px;font-weight:700;line-height:1.4;color:var(--ink)}
-
 /* ---------- 按鈕 ---------- */
 .btn{
   width:100%;min-height:60px;padding:16px;
@@ -206,25 +192,112 @@ select.filled{border-color:var(--navy-soft);font-weight:600}
   margin-top:10px;line-height:1.5;
 }
 
-/* ---------- 預覽 ---------- */
-#preview{display:none}
-.shot{
-  position:relative;border-radius:var(--r-md);overflow:hidden;
-  border:1px solid var(--line-strong);background:#fff;margin-bottom:11px;
+/* ---------- ★v12★ 拍攝清單（批次上傳） ----------
+ * 一般設備 5～8 項直接平鋪；超過 12 項（泰控「其他」45 項）才分組並預設收合 */
+[hidden]{display:none!important}
+.tally{
+  margin-left:auto;font-size:12px;font-weight:700;color:var(--sub);
+  font-variant-numeric:tabular-nums;
 }
-#preview img{width:100%;display:block}
-.chips{display:flex;flex-direction:column;gap:7px;margin-bottom:13px}
-.chip{
-  font-size:12px;font-weight:600;line-height:1.5;
-  padding:8px 11px;border-radius:var(--r-sm);
-  display:flex;align-items:flex-start;gap:7px;
+.cloudnote{font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 6px}
+
+.grp{border-top:1px solid var(--line)}
+.grp:first-child{border-top:none}
+.grp>summary{
+  list-style:none;cursor:pointer;min-height:52px;padding:10px 2px;
+  display:flex;align-items:center;gap:10px;
+  font-size:15px;font-weight:700;color:var(--ink);
 }
-.cropinfo{background:var(--ok-soft);color:var(--ok);border:1px solid rgba(21,128,61,.2)}
-.cropinfo.bad{background:var(--err-soft);color:var(--err);border-color:rgba(179,38,30,.25)}
-#shotInfo{
-  display:none;background:var(--bg);color:var(--ink-mid);
-  border:1px solid var(--line);
+.grp>summary::-webkit-details-marker{display:none}
+.grp-n{
+  margin-left:auto;font-size:12px;font-weight:700;color:var(--sub);
+  font-variant-numeric:tabular-nums;
 }
+.grp-n.bad{color:var(--err)}
+.grp>summary svg{flex:none;color:var(--sub);transition:transform .16s}
+.grp[open]>summary svg{transform:rotate(180deg)}
+
+.task{
+  display:grid;grid-template-columns:22px 1fr auto;column-gap:10px;row-gap:8px;
+  align-items:center;padding:12px 0;border-top:1px solid var(--line);
+}
+.task:first-child{border-top:none}
+
+/* 左側狀態圓點：空 → 已拍 → 上傳中 → 完成／失敗 */
+.st{
+  width:22px;height:22px;border-radius:50%;box-sizing:border-box;
+  border:2px solid var(--line-strong);color:var(--card);
+  display:flex;align-items:center;justify-content:center;
+}
+.st svg{width:12px;height:12px;display:none}
+.is-ready .st{background:var(--navy);border-color:var(--navy)}
+.is-done .st{background:var(--ok);border-color:var(--ok)}
+.is-done .st .i-ok{display:block}
+.is-failed .st{background:var(--err);border-color:var(--err)}
+.is-failed .st .i-x{display:block}
+.is-uploading .st{
+  border-color:var(--line-strong);border-top-color:var(--amber);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .is-uploading .st{animation:none;border-color:var(--amber)}
+}
+
+.task-txt{min-width:0}
+.task-label{
+  font-size:15.5px;font-weight:650;line-height:1.4;color:var(--ink);word-break:break-word;
+}
+.task-note,.task-cloud{font-size:12px;line-height:1.5;margin-top:2px}
+.task-note{color:var(--ink-mid);white-space:pre-line}
+.task-note.ok{color:var(--ok)}
+.task-note.err{color:var(--err);font-weight:600}
+.task-cloud{color:var(--amber);font-weight:600}
+.task-note:empty,.task-cloud:empty{display:none}
+
+.task-btn{
+  display:flex;align-items:center;gap:6px;min-height:52px;padding:0 13px;
+  font-family:inherit;font-size:14.5px;font-weight:700;white-space:nowrap;
+  color:var(--navy);background:var(--card);
+  border:2px solid var(--navy);border-radius:var(--r-md);cursor:pointer;
+  transition:transform .1s;
+}
+.task-btn:active:not(:disabled){transform:scale(.97)}
+.is-ready .task-btn,.is-failed .task-btn{color:var(--sub);border-color:var(--line-strong)}
+.task-btn:disabled{
+  color:var(--disabled-ink);background:var(--disabled-bg);
+  border-color:var(--disabled-bg);cursor:not-allowed;
+}
+
+/* 縮圖：拍了才出現，顯示的就是最後會歸檔的樣子（含白邊） */
+.task-shot{grid-column:2 / -1;display:none}
+.task.has-shot .task-shot{display:block}
+.task-shot img{
+  display:block;width:136px;max-width:100%;aspect-ratio:404 / 330;
+  border-radius:8px;border:1px solid var(--line-strong);background:#fff;
+}
+
+/* 底部操作列：黏在畫面下緣，上傳中也隨時看得到進度 */
+.actbar{
+  position:sticky;bottom:0;z-index:15;
+  margin:14px -16px 0;padding:10px 16px calc(12px + env(safe-area-inset-bottom));
+  background:var(--card);border-top:1px solid var(--line);
+  box-shadow:0 -6px 16px rgba(16,32,64,.07);
+  display:flex;flex-direction:column;gap:8px;
+}
+.act-top{display:flex;align-items:center;gap:10px;min-height:32px}
+.actmsg{flex:1;min-width:0;font-size:12.5px;line-height:1.45;color:var(--ink-mid)}
+.actmsg.warn{color:var(--amber);font-weight:600}
+.linkbtn{
+  flex:none;background:none;border:none;padding:6px 4px;min-height:36px;
+  font-family:inherit;font-size:13px;font-weight:600;color:var(--sub);
+  text-decoration:underline;cursor:pointer;
+}
+.linkbtn.confirm{color:var(--err)}
+.prog{height:6px;border-radius:6px;background:var(--disabled-bg);overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s}
+.btn-go.busy{cursor:progress}
+body.has-bar #toast{bottom:calc(158px + env(safe-area-inset-bottom))}
 
 /* ---------- 計數 ---------- */
 .count{
@@ -267,7 +340,7 @@ canvas{display:none}
       <b>佑發 · 保養拍照</b>
       <span>高速公路局北區養護工程分局</span>
     </div>
-    <div class="ver">v11</div>
+    <div class="ver">v12</div>
   </div>
 
   <!-- 步驟指示：讓師傅隨時知道進行到哪 -->
@@ -296,79 +369,35 @@ canvas{display:none}
       <label for="equip">設備編號</label>
       <select id="equip" disabled><option value="">先選機房</option></select>
     </div>
-
-    <div class="field">
-      <label for="item">檢查項目</label>
-      <select id="item" disabled><option value="">先選設備</option></select>
-    </div>
   </section>
 
-  <!-- 即將拍攝確認 -->
-  <div class="slot" id="slotBox">
-    <div class="slot-l">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-      即將拍攝
-    </div>
-    <b id="slotText"></b>
-  </div>
-
-  <!-- ② 拍攝 -->
-  <section class="card">
+  <!-- ② 拍攝清單：設備選定後，依 MENU_TREE 自動展開該設備全部檢查項目，逐項拍照 -->
+  <section class="card" id="listCard" hidden>
     <div class="card-h">
       <div class="card-n">2</div>
-      <h2>拍攝照片</h2>
+      <h2>拍攝清單</h2>
+      <span class="tally" id="tally"></span>
     </div>
-
-    <div class="stack">
-      <button class="btn btn-primary" id="camBtn" disabled>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>
-        </svg>
-        直接拍照
-      </button>
-
-      <button class="btn btn-outline" id="selBtn" disabled>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-          <path d="M21 15l-5-5L5 21"/>
-        </svg>
-        從相簿選擇
-      </button>
-    </div>
-
-    <div class="hint">使用「時間相機 App」拍好後，<br>點『從相簿選擇』即可保留浮水印</div>
+    <div class="cloudnote" id="cloudNote" hidden></div>
+    <div id="taskList"></div>
   </section>
 
-  <!-- 相機 input（capture=environment 強制後鏡頭） -->
-  <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
-  <!-- 相簿 input（不加 capture，讓使用者選相簿） -->
-  <input type="file" id="galInput" accept="image/*" style="display:none">
+  <!-- 共用的檔案選擇器（不加 capture：手機會自己問「拍照／相簿」，時間相機 App 拍的照片走相簿才保得住浮水印） -->
+  <input type="file" id="fileInput" accept="image/*" style="display:none">
 
-  <!-- ③ 確認並上傳 -->
-  <div id="preview">
-    <section class="card">
-      <div class="card-h">
-        <div class="card-n">3</div>
-        <h2>確認並上傳</h2>
-      </div>
-
-      <div class="shot"><img id="previewImg" alt="照片預覽"></div>
-
-      <div class="chips">
-        <div class="chip cropinfo" id="cropInfo"></div>
-        <div class="chip" id="shotInfo"></div>
-      </div>
-
-      <div class="stack">
-        <button class="btn btn-go" id="upBtn">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>
-          </svg>
-          上傳並歸檔
-        </button>
-        <button class="btn btn-quiet" id="retakeBtn">重新選擇照片</button>
-      </div>
-    </section>
+  <!-- ③ 全部上傳：黏在畫面下緣，一張接一張依序送出 -->
+  <div class="actbar" id="actBar" hidden>
+    <div class="act-top" id="actTop">
+      <div class="actmsg" id="actMsg"></div>
+      <button type="button" class="linkbtn" id="clearBtn" hidden>清除全部</button>
+    </div>
+    <div class="prog" id="prog" hidden><i id="progFill"></i></div>
+    <button class="btn btn-go" id="upAllBtn" disabled>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>
+      </svg>
+      <span id="upAllTxt">全部上傳</span>
+    </button>
   </div>
 
   <div class="count" id="count"></div>
@@ -386,10 +415,26 @@ const MAX_SIDE    = 1024;      // 壓縮最長邊（px）
 const JPEG_Q      = 0.75;      // JPEG 品質（0~1）
 const MAX_FILE_MB = 25;        // 原始檔案大小上限（MB），超過視為選錯檔，直接擋下
 const MENU_RETRY  = 3;         // 選單載入失敗時的自動重試次數
+const GROUP_MIN   = 12;        // ★v12★ 一個設備的檢查項目超過這個數才分組（泰控「其他」45 項）
+const THUMB_W     = 160;       // ★v12★ 清單縮圖寬度（px）
+const NET_FAIL_MAX = 3;        // ★v12★ 連續幾次「連線失敗」就暫停佇列，避免網路斷了還一張張等逾時
 
-let MENU = {}, uploadedCount = 0, currentDataUrl = null;
-let currentShotYmd = null;   // ★v6★ 照片 EXIF 拍攝日（YYYY-MM-DD），讀不到為 null
+let MENU = {}, uploadedCount = 0;
 const $ = id => document.getElementById(id);
+
+/* ★v12★ 清單式批次上傳的狀態
+ * tasks 的每一項：{ desc, label, status, blob, thumb, shotYmd, cropText, cropBad,
+ *                  error, where, cloud, busy, el }
+ * status：empty（還沒拍）→ ready（已拍）→ uploading → done | failed
+ * 照片只存「壓縮後的 Blob」與一張小縮圖，不存 dataURL：
+ *   45 張 dataURL 預覽解碼後的點陣圖約 150 MB，舊手機會當掉；
+ *   Blob 不佔 JS 記憶體，上傳當下才轉 base64，傳完立刻釋放。 */
+let tasks = [];
+let groups = [];
+let pendingTask = null;   // 按下某一項的「拍照/選圖」後，正在等檔案選擇器回來的那一項
+let uploading = false;
+let lookupSeq = 0;        // 雲端狀態查詢的序號：換設備後，舊查詢的回應一律丟棄
+let wakeLock = null;
 
 /* ============================================================
  * ★v10★ 步驟指示器
@@ -397,8 +442,8 @@ const $ = id => document.getElementById(id);
  *   1 = 位置還沒選齊  2 = 選好了，等拍照  3 = 照片已就緒，等上傳
  * ============================================================ */
 function updateStepper() {
-  const ready   = !!($('room').value && $('equip').value && $('item').value);
-  const hasShot = !!currentDataUrl;
+  const ready   = !!($('room').value && $('equip').value);
+  const hasShot = pendingTasks().length > 0;
   const now = hasShot ? 3 : (ready ? 2 : 1);
   [1, 2, 3].forEach(n => {
     const el = $('st' + n);
@@ -502,13 +547,6 @@ function ymFromYmd(ymd) {
   const p = ymd.split('-');
   return (+p[0] - 1911) + '年' + (+p[1]) + '月';
 }
-function updateShotInfo() {
-  const el = $('shotInfo');
-  el.style.display = 'flex';
-  el.textContent = currentShotYmd
-    ? '📅 拍攝日期 ' + rocFromYmd(currentShotYmd) + '　日期與月份歸檔以此為準'
-    : '📅 讀不到拍攝日期，將以「上傳當天」為準';
-}
 
 /* ============================================================
  * 載入選單（含失敗自動重試）
@@ -549,91 +587,286 @@ function loadMenu(attempt) {
 loadMenu();
 
 /* ============================================================
- * 三層連動下拉（機房 → 設備 → 項目）
+ * 兩層連動下拉（機房 → 設備）＋ 檢查項目清單
+ * ★v12★ 原本第三層「檢查項目」下拉改成清單：設備一選好，就把該設備在
+ * MENU_TREE 裡的全部項目展開，逐項拍照，最後按一次「全部上傳」。
  * 補上 MENU 結構的防呆：若後端資料缺層（例如某機房底下沒設備）
  * 舊版會直接 throw 讓整頁 JS 掛掉，這裡改為提示並保持可操作。
  * ============================================================ */
 $('room').onchange = e => {
   const eq = $('equip');
   eq.innerHTML = '<option value="">請選擇設備…</option>';
-  $('item').innerHTML = '<option value="">先選設備</option>';
-  $('item').disabled = true;
   const roomData = e.target.value ? MENU[e.target.value] : null;
   if (roomData && typeof roomData === 'object') {
     sortEquipKeys(Object.keys(roomData)).forEach(k => eq.add(new Option(k, k)));
-    eq.disabled = false;
-  } else {
-    if (e.target.value) {
-      console.warn('[menu] 機房「' + e.target.value + '」底下沒有設備資料');
-      toast('此機房沒有設備資料，請檢查選單來源', 'err');
-    }
-    eq.disabled = true;
+  } else if (e.target.value) {
+    console.warn('[menu] 機房「' + e.target.value + '」底下沒有設備資料');
+    toast('此機房沒有設備資料，請檢查選單來源', 'err');
   }
-  markFilled(e.target); markFilled(eq); markFilled($('item'));
-  refreshSlot();
+  markFilled(e.target); markFilled(eq);
+  showList();
 };
 
-$('equip').onchange = e => {
-  const it = $('item');
-  it.innerHTML = '<option value="">請選擇項目…</option>';
-  const room = $('room').value;
-  const items = (e.target.value && MENU[room]) ? MENU[room][e.target.value] : null;
+$('equip').onchange = e => { markFilled(e.target); showList(); };
+
+/* 依目前選的機房＋設備重建清單。選單在「有未上傳照片」或「上傳中」時會被鎖住，
+ * 所以走到這裡不會把還沒傳的照片弄丟（見 paintSummary 的鎖定）。 */
+function showList() {
+  lookupSeq++;                                   // 作廢還在路上的雲端狀態查詢
+  disarmClear();
+  $('cloudNote').hidden = true;
+  const room = $('room').value, equip = $('equip').value;
+  const items = (room && equip && MENU[room]) ? MENU[room][equip] : null;
+  tasks = []; groups = [];
+  $('taskList').innerHTML = '';
   if (Array.isArray(items) && items.length) {
-    items.forEach(x => it.add(new Option(x.label || x.desc, x.desc)));
-    it.disabled = false;
-  } else {
-    if (e.target.value) {
-      console.warn('[menu] 設備「' + e.target.value + '」底下沒有檢查項目');
-      toast('此設備沒有檢查項目，請檢查選單來源', 'err');
-    }
-    it.disabled = true;
+    tasks = items.map(x => ({
+      desc: x.desc, label: x.label || x.desc, status: 'empty',
+      blob: null, thumb: '', shotYmd: null, cropText: '', cropBad: false,
+      error: '', where: '', cloud: null, busy: false, el: null
+    }));
+    groups = makeGroups(tasks);
+    renderList();
+    lookupFilled();
+  } else if (equip) {
+    console.warn('[menu] 設備「' + equip + '」底下沒有檢查項目');
+    toast('此設備沒有檢查項目，請檢查選單來源', 'err');
   }
-  markFilled(e.target); markFilled(it);
-  refreshSlot();
-};
-$('item').onchange = e => { markFilled(e.target); refreshSlot(); };
-
-function refreshSlot() {
-  const r = $('room').value, e = $('equip').value, i = $('item').value;
-  const ready = !!(r && e && i);
-  $('camBtn').disabled = !ready;
-  $('selBtn').disabled = !ready;
-  $('slotBox').style.display = ready ? 'block' : 'none';
-  if (ready) $('slotText').textContent = r + ' · ' + i;
-  updateStepper();
+  const show = tasks.length > 0;
+  $('listCard').hidden = !show;
+  $('actBar').hidden = !show;
+  document.body.classList.toggle('has-bar', show);
+  paintSummary();
 }
 
 /* ============================================================
- * 按鈕觸發對應 input
+ * 分組：只有項目超過 GROUP_MIN 才做（105/106 個設備只有 5～8 項，維持平鋪）。
+ * 依「連續出現」切段，MENU_TREE 內本來就依序排列：
+ *   「X之N」       → 依檢查類型 X 分組   例：送風風扇軸承檢查之1～7
+ *   「X{組}-{序}」 → 依組號分組          例：空氣濾清器電源檢測1-1／功能檢測1-2／外觀照1-3 → 第 1 組
+ * 依組號而不是依檢查類型，是因為師傅是走到某一台前面，連拍它的三張。
+ * 都對不上的歸「其他」。分組只影響顯示，不碰 desc 定位鍵。
  * ============================================================ */
-$('camBtn').onclick = () => $('camInput').click();
-$('selBtn').onclick = () => $('galInput').click();
-$('retakeBtn').onclick = () => {
-  $('camInput').value = '';
-  $('galInput').value = '';
-  $('preview').style.display = 'none';
-  $('shotInfo').style.display = 'none';
-  currentDataUrl = null;
-  currentShotYmd = null;
+function makeGroups(list) {
+  if (list.length <= GROUP_MIN) return [{ title: '', tasks: list }];
+  const out = [];
+  let cur = null, curKey = null;
+  list.forEach(t => {
+    let key = '', stem = '', n = '', m;
+    if ((m = /^(.*?)(\d+)-\d+$/.exec(t.label)))   { key = 'u' + m[2]; stem = m[1]; n = m[2]; }
+    else if ((m = /^(.*?)之\d+$/.exec(t.label))) { key = 'k' + m[1]; stem = m[1]; }
+    if (!cur || key !== curKey) { cur = { key: key, n: n, stems: [], tasks: [] }; out.push(cur); curKey = key; }
+    cur.tasks.push(t);
+    if (stem) cur.stems.push(stem);
+  });
+  out.forEach(g => {
+    g.title = !g.key ? '其他' : (g.key[0] === 'u' ? lcp(g.stems) + ' 第' + g.n + '組' : g.stems[0]);
+  });
+  return out;
+}
+function lcp(arr) {   // 最長共同開頭：空氣濾清器電源檢測／功能檢測／外觀照 → 空氣濾清器
+  let p = arr[0] || '';
+  arr.forEach(s => { while (!s.startsWith(p)) p = p.slice(0, -1); });
+  return p;
+}
+
+/* ============================================================
+ * 清單畫面
+ * 每一列只建一次 DOM，之後狀態變化用 paintTask 原地更新——
+ * 不整份重畫，已展開的分組才不會在每次狀態變化時被收起來。
+ * ============================================================ */
+const SVG_OK   = '<svg class="i-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+const SVG_X    = '<svg class="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const SVG_CAM  = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+const SVG_CHEV = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l5 5 5-5"/></svg>';
+
+function renderList() {
+  const box = $('taskList');
+  box.innerHTML = '';
+  groups.forEach(g => {
+    if (!g.title) { g.tasks.forEach(t => box.appendChild(buildRow(t))); return; }
+    const d = document.createElement('details');   // 預設收合；原生元素，點標題即展開
+    d.className = 'grp';
+    d.innerHTML = '<summary><span class="grp-t"></span><span class="grp-n"></span>' + SVG_CHEV + '</summary><div class="grp-body"></div>';
+    d.querySelector('.grp-t').textContent = g.title;
+    const body = d.querySelector('.grp-body');
+    g.tasks.forEach(t => body.appendChild(buildRow(t)));
+    g.el = d;
+    g.nEl = d.querySelector('.grp-n');
+    box.appendChild(d);
+  });
+  tasks.forEach(paintTask);
+}
+
+function buildRow(t) {
+  const el = document.createElement('div');
+  el.className = 'task';
+  el.innerHTML =
+    '<span class="st" aria-hidden="true">' + SVG_OK + SVG_X + '</span>' +
+    '<div class="task-txt"><div class="task-label"></div><div class="task-note"></div><div class="task-cloud"></div></div>' +
+    '<button type="button" class="task-btn">' + SVG_CAM + '<span></span></button>' +
+    '<div class="task-shot"><img alt="照片縮圖"></div>';
+  el.querySelector('.task-label').textContent = t.label;   // textContent：選單文字不會被當成 HTML
+  el.querySelector('.task-btn').onclick = () => pickPhoto(t);
+  t.el = el;
+  return el;
+}
+
+/* 雲端狀態 → 這一項該怎麼提示、能不能再拍。規則比照後端 getFilledSlots / uploadPhoto：
+ *   single（Z 欄只出現一次）：uploadPhoto 直接覆蓋 → 只提醒，不擋
+ *   多槽位：依序填入下一個空格；全滿時 uploadPhoto 會回「槽位已滿」→ 這裡直接擋下，免得白拍 */
+function cloudState(t) {
+  const c = t.cloud;
+  if (!c || !c.total) return { block: false, note: '' };
+  if (c.single) return { block: false, note: c.used ? '雲端已有照片，再傳會覆蓋' : '' };
+  if (c.used >= c.total) return { block: true, note: '雲端 ' + c.total + ' 個槽位都已有照片；要更換請先到試算表清空該格' };
+  return { block: false, note: c.used ? '雲端已有 ' + c.used + '/' + c.total + ' 格，這張會填入下一個空格' : '' };
+}
+
+function shotText(t) {
+  return (t.shotYmd ? '拍攝日 ' + rocFromYmd(t.shotYmd) : '讀不到拍攝日，以上傳當天為準') +
+    (t.cropText ? '\n' + t.cropText : '');
+}
+
+function paintTask(t) {
+  const el = t.el;
+  if (!el) return;
+  const cs = cloudState(t);
+  el.className = 'task is-' + t.status + (t.thumb ? ' has-shot' : '');
+
+  let note = '', kind = '';
+  if (t.status === 'failed')         { note = t.error || '上傳失敗'; kind = 'err'; }
+  else if (t.status === 'done')      { note = '已歸檔' + (t.where ? '　' + t.where : ''); kind = 'ok'; }
+  else if (t.status === 'uploading') { note = '上傳中…'; }
+  else if (t.busy)                   { note = '處理照片中…'; }
+  else if (t.status === 'ready')     { note = shotText(t); kind = t.cropBad ? 'err' : ''; }
+  const n = el.querySelector('.task-note');
+  n.textContent = note;
+  n.className = 'task-note' + (kind ? ' ' + kind : '');
+  el.querySelector('.task-cloud').textContent = (t.status === 'done' || t.status === 'uploading') ? '' : cs.note;
+
+  const img = el.querySelector('.task-shot img');
+  if (t.thumb && img.getAttribute('src') !== t.thumb) img.src = t.thumb;   // 縮圖沒變就不重設，避免閃爍
+
+  const btn = el.querySelector('.task-btn');
+  btn.disabled = uploading || t.busy || t.status === 'done' || cs.block;
+  btn.querySelector('span').textContent =
+    t.status === 'done' ? '已完成' : (cs.block ? '已滿' : (t.thumb ? '重拍/重選' : '拍照/選圖'));
+}
+
+function pendingTasks() { return tasks.filter(t => t.blob && t.status !== 'done'); }
+
+/* 計數、按鈕文字、選單鎖定、步驟指示——每次狀態變化後統一刷新
+ * 鎖定：有未上傳的照片，或正在上傳 → 機房/設備下拉鎖住，避免切換設備把照片弄丟 */
+function paintSummary() {
+  const shot = tasks.filter(t => t.thumb).length;
+  $('tally').textContent = tasks.length ? '已拍 ' + shot + '/' + tasks.length : '';
+  groups.forEach(g => {
+    if (!g.nEl) return;
+    const n   = g.tasks.filter(t => t.thumb).length;
+    const bad = g.tasks.filter(t => t.status === 'failed').length;
+    g.nEl.textContent = '已拍 ' + n + '/' + g.tasks.length + (bad ? '・失敗 ' + bad : '');
+    g.nEl.className = 'grp-n' + (bad ? ' bad' : '');
+  });
+
+  const pending = pendingTasks();
+  const failed  = tasks.filter(t => t.status === 'failed').length;
+  const locked  = uploading || pending.length > 0;
+  $('room').disabled  = locked;
+  $('equip').disabled = locked || !$('room').value || $('equip').options.length < 2;
+  $('upAllBtn').disabled = !uploading && pending.length === 0;   // 上傳中保持醒目綠色（uploadAll 自己擋重複觸發）
+  $('upAllBtn').classList.toggle('busy', uploading);
+  if (!uploading) {
+    $('upAllTxt').textContent = pending.length
+      ? (failed ? '重新上傳（' : '全部上傳（') + pending.length + ' 張）' : '全部上傳';
+  }
+  $('clearBtn').hidden = uploading || !tasks.some(t => t.thumb);
+
+  const msg = $('actMsg');
+  msg.className = 'actmsg';
+  if (uploading) {
+    msg.textContent = '上傳中請保持螢幕開啟，先不要離開這個頁面';
+    msg.classList.add('warn');
+  } else {
+    msg.textContent = pending.length ? '有未上傳的照片，上傳或清除後才能換設備' : '';
+  }
+  $('actTop').hidden = !msg.textContent && $('clearBtn').hidden;
   updateStepper();
+}
+
+/* 「清除全部」：頁面裡的 confirm() 在 HtmlService 的 iframe 沙箱不一定能用，
+ * 改成兩段式——第一下變紅色「再按一次確定清除」，4 秒內再按才真的清。 */
+let clearTimer = null;
+function disarmClear() {
+  if (clearTimer) clearTimeout(clearTimer);
+  clearTimer = null;
+  const b = $('clearBtn');
+  b.textContent = '清除全部';
+  b.classList.remove('confirm');
+}
+$('clearBtn').onclick = () => {
+  if (!clearTimer) {
+    $('clearBtn').textContent = '再按一次確定清除';
+    $('clearBtn').classList.add('confirm');
+    clearTimer = setTimeout(disarmClear, 4000);
+    return;
+  }
+  showList();   // 同一設備重新展開空白清單（showList 內會解除武裝）
 };
 
-// 兩個 input 都走同一個處理流程
-$('camInput').onchange = ev => handleFile(ev.target.files[0]);
-$('galInput').onchange = ev => handleFile(ev.target.files[0]);
+/* ============================================================
+ * 雲端已有照片的標示（唯讀，後端 getFilledSlots）
+ * 在背景查，不擋拍照；查不到（沒更新後端、斷線…）只是少了標示，不影響上傳。
+ * ============================================================ */
+function lookupFilled() {
+  const seq = ++lookupSeq;
+  const room = $('room').value;
+  const note = $('cloudNote');
+  note.hidden = false;
+  note.textContent = '正在查詢雲端已有的照片…';
+  const fail = () => { if (seq === lookupSeq) note.textContent = '雲端狀態查詢失敗（不影響拍照與上傳）'; };
+  google.script.run
+    .withSuccessHandler(res => {
+      if (seq !== lookupSeq) return;             // 已經換設備了，丟掉舊回應
+      if (!res || !res.ok) { console.warn('[lookup] 後端回報失敗：', res); fail(); return; }
+      tasks.forEach(t => { t.cloud = (res.slots && res.slots[t.desc]) || null; paintTask(t); });
+      note.textContent = res.exists
+        ? '雲端狀態查自本月分頁 ' + res.tab + '，補拍上個月的照片時僅供參考'
+        : '本月分頁 ' + res.tab + ' 還沒建立，第一張上傳時會自動建立';
+    })
+    .withFailureHandler(err => { console.warn('[lookup] 呼叫失敗：', err); fail(); })
+    .getFilledSlots(room, tasks.map(t => t.desc));
+}
+
+/* ============================================================
+ * 選照片
+ * 一個共用的檔案選擇器，用 pendingTask 記住是哪一項按的（不為每一列各建一個 input）。
+ * 不加 capture：手機會自己問「拍照／相簿」。
+ * ============================================================ */
+function pickPhoto(t) {
+  if (uploading || t.busy || t.status === 'done') return;
+  pendingTask = t;
+  $('fileInput').click();
+}
+$('fileInput').onchange = ev => {
+  const file = ev.target.files[0];
+  ev.target.value = '';      // 清掉：之後再選同一張照片也會觸發 change
+  handleFile(file);
+};
 
 /* ============================================================
  * 檔案接收 + 防呆
  * ① 檔案型別檢查：相簿可能誤選到影片/PDF，先擋下
  * ② 檔案大小檢查：超大檔（全景照等）轉 dataURL 會讓手機記憶體爆掉
- * ③ 改用 URL.createObjectURL 解碼：
- *    比 FileReader→dataURL 少一份 base64 副本、速度較快也較省記憶體
- *    （特殊寫法說明：objectURL 用完必須 revokeObjectURL 釋放，否則會累積佔記憶體）
+ * ③ 用 URL.createObjectURL 解碼：比 FileReader→dataURL 少一份 base64 副本、
+ *    速度較快也較省記憶體（objectURL 用完必須 revokeObjectURL，否則會累積佔記憶體）
  * ============================================================ */
 function handleFile(file) {
-  if (!file) return;
+  const t = pendingTask;
+  pendingTask = null;
+  if (!file || !t) return;
   try {
-    console.log('[file] 選取：' + file.name + '，' + (file.size / 1048576).toFixed(2) + ' MB，type=' + file.type);
+    console.log('[file] 選取：' + file.name + ' → ' + t.desc + '，' + (file.size / 1048576).toFixed(2) + ' MB，type=' + file.type);
 
     if (file.type && !file.type.startsWith('image/')) {
       toast('請選擇「照片」檔案（目前選到的是 ' + file.type + '）', 'err');
@@ -644,19 +877,34 @@ function handleFile(file) {
       return;
     }
 
-    // ★v6★ 先讀 EXIF 拍攝日（只讀檔案開頭 256KB，速度極快；與壓縮平行進行）
-    currentShotYmd = null;
-    const fr = new FileReader();
-    fr.onload  = () => { currentShotYmd = parseExifDate(fr.result); updateShotInfo(); };
-    fr.onerror = () => updateShotInfo();
-    fr.readAsArrayBuffer(file.slice(0, 262144));
-
-    const objUrl = URL.createObjectURL(file);
-    compress(objUrl, () => URL.revokeObjectURL(objUrl));
+    t.busy = true;
+    paintTask(t);
+    // ★v6★ EXIF 拍攝日（只讀檔案開頭 256KB，速度極快）與壓縮平行進行
+    Promise.all([readShotYmd(file), compress(file)])
+      .then(r => {
+        t.shotYmd = r[0];
+        t.blob = r[1].blob; t.thumb = r[1].thumb;
+        t.cropText = r[1].cropText; t.cropBad = r[1].cropBad;
+        t.status = 'ready'; t.error = '';
+      })
+      .catch(err => {
+        console.error('[file] 處理失敗：', err);
+        toast('照片處理失敗：' + (err && err.message ? err.message : '請重新選擇'), 'err');
+      })
+      .then(() => { t.busy = false; paintTask(t); paintSummary(); });
   } catch (err) {
     console.error('[file] 讀取失敗：', err);
     toast('照片讀取失敗，請重新選擇', 'err');
   }
+}
+
+function readShotYmd(file) {
+  return new Promise(resolve => {
+    const fr = new FileReader();
+    fr.onload  = () => resolve(parseExifDate(fr.result));
+    fr.onerror = () => resolve(null);
+    fr.readAsArrayBuffer(file.slice(0, 262144));
+  });
 }
 
 /* ============================================================
@@ -666,143 +914,240 @@ function handleFile(file) {
  * 導致工程驗收被退件。
  * 新策略：原圖 100% 保留 → 等比縮小塞進 404:330 比例畫布 → 剩餘空間補純白。
  * 輸出比例仍吻合容器，放進儲存格不會變形。
- * done：載入結束後的回呼，用來釋放 objectURL
+ *
+ * ★v12★ 清單會同時留著多張照片，所以：
+ *   · 輸出 Blob（不佔 JS 記憶體）＋ 一張小縮圖，不再留整張 dataURL
+ *   · 共用同一張 #cv（多開 canvas 在 iOS Safari 會吃光記憶體），
+ *     因此用 compressChain 讓壓縮一張接一張執行，不會互相覆寫畫布
  * ============================================================ */
-function compress(src, done) {
-  const img = new Image();
+let compressChain = Promise.resolve();
+const thumbCv = document.createElement('canvas');
 
-  img.onload = () => {
-    try {
-      const cv = $('cv'), ctx = cv.getContext('2d');
+function compress(file) {
+  const job = compressChain.then(() => new Promise((resolve, reject) => {
+    const objUrl = URL.createObjectURL(file);
+    const img = new Image();
 
-      const iw = img.width, ih = img.height;
-      if (!iw || !ih) throw new Error('照片尺寸為 0，可能是損毀檔');
+    img.onload = () => {
+      try {
+        const cv = $('cv'), ctx = cv.getContext('2d');
 
-      // ① 畫布尺寸：固定為容器比例 BOX_RATIO，最長邊不超過 MAX_SIDE
-      //    （比例吻合容器 → 放進儲存格不會被二次縮放變形）
-      let outW = MAX_SIDE;
-      let outH = Math.round(MAX_SIDE / BOX_RATIO);
+        const iw = img.width, ih = img.height;
+        if (!iw || !ih) throw new Error('照片尺寸為 0，可能是損毀檔');
 
-      // ② ★Contain 等比縮放★：算出「能完整塞進畫布」的縮放比
-      //    取寬高兩個縮放比中「較小」者 → 保證原圖每一個像素都在畫布內，
-      //    時間相機的左上角 GPS 地圖與右上角時間浮水印 100% 不會被裁掉。
-      //    原圖比畫布小時 scale 會 >1，此處夾在 1 以內避免放大失真。
-      const scale = Math.min(outW / iw, outH / ih, 1);
-      const drawW = Math.round(iw * scale);
-      const drawH = Math.round(ih * scale);
+        // ① 畫布尺寸：固定為容器比例 BOX_RATIO，最長邊不超過 MAX_SIDE
+        //    （比例吻合容器 → 放進儲存格不會被二次縮放變形）
+        let outW = MAX_SIDE;
+        let outH = Math.round(MAX_SIDE / BOX_RATIO);
 
-      // ③ 置中：多出來的空間平均分配到上下（或左右）
-      const dx = Math.round((outW - drawW) / 2);
-      const dy = Math.round((outH - drawH) / 2);
+        // ② ★Contain 等比縮放★：算出「能完整塞進畫布」的縮放比
+        //    取寬高兩個縮放比中「較小」者 → 保證原圖每一個像素都在畫布內，
+        //    時間相機的左上角 GPS 地圖與右上角時間浮水印 100% 不會被裁掉。
+        //    原圖比畫布小時 scale 會 >1，此處夾在 1 以內避免放大失真。
+        const scale = Math.min(outW / iw, outH / ih, 1);
+        const drawW = Math.round(iw * scale);
+        const drawH = Math.round(ih * scale);
 
-      // ④ 先鋪滿純白背景，再把等比縮小後的完整原圖畫上去
-      //    （不先填白的話，JPEG 沒有透明通道，空白處會變成黑色）
-      cv.width = outW; cv.height = outH;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, outW, outH);
-      ctx.imageSmoothingQuality = 'high';   // 縮圖品質，讓浮水印文字保持清晰
-      ctx.drawImage(img, 0, 0, iw, ih, dx, dy, drawW, drawH);
+        // ③ 置中：多出來的空間平均分配到上下（或左右）
+        const dx = Math.round((outW - drawW) / 2);
+        const dy = Math.round((outH - drawH) / 2);
 
-      currentDataUrl = cv.toDataURL('image/jpeg', JPEG_Q);
-      $('previewImg').src = currentDataUrl;
-      $('preview').style.display = 'block';
-      updateStepper();
+        // ④ 先鋪滿純白背景，再把等比縮小後的完整原圖畫上去
+        //    （不先填白的話，JPEG 沒有透明通道，空白處會變成黑色）
+        cv.width = outW; cv.height = outH;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.imageSmoothingQuality = 'high';   // 縮圖品質，讓浮水印文字保持清晰
+        ctx.drawImage(img, 0, 0, iw, ih, dx, dy, drawW, drawH);
 
-      // 白邊方向與厚度（僅供顯示，讓現場確認畫面完整）
-      const padSide = (dy > dx) ? '上下' : (dx > 0 ? '左右' : '無');
-      const padPx   = Math.max(dx, dy);
-      console.log('[compress] 原圖 ' + iw + 'x' + ih +
-        ' → 畫布 ' + outW + 'x' + outH + '（圖 ' + drawW + 'x' + drawH +
-        '，白邊 ' + padSide + ' ' + padPx + 'px），約 ' +
-        Math.round(currentDataUrl.length * 3 / 4 / 1024) + ' KB');
+        // 白邊方向與厚度（僅供顯示，讓現場確認畫面完整）
+        const padSide = (dy > dx) ? '上下' : (dx > 0 ? '左右' : '無');
+        const padPx   = Math.max(dx, dy);
 
-      // ★自我驗證：確認輸出比例吻合容器，且原圖完整無裁切★
-      const outRatio = outW / outH;
-      const diff = Math.abs(outRatio - BOX_RATIO);
-      const info = $('cropInfo');
-      if (diff < 0.01) {
-        info.className = 'chip cropinfo';
-        info.textContent = '✓ 原圖完整保留，浮水印未裁切　' + outW + '×' + outH +
-          '　白邊 ' + (padSide === '無' ? '無' : padSide + ' ' + padPx + 'px');
-      } else {
-        info.className = 'chip cropinfo bad';
-        info.textContent = '⚠ 比例不符 ' + outRatio.toFixed(3) +
-          '（應為 ' + BOX_RATIO.toFixed(3) + '）→ 版本未更新，請重新部署';
+        // ★自我驗證：確認輸出比例吻合容器，且原圖完整無裁切★
+        const outRatio = outW / outH;
+        const bad = Math.abs(outRatio - BOX_RATIO) >= 0.01;
+        const cropText = bad
+          ? '⚠ 比例不符 ' + outRatio.toFixed(3) + '（應為 ' + BOX_RATIO.toFixed(3) + '）→ 版本未更新，請重新部署'
+          : '✓ 原圖完整保留';
+
+        cv.toBlob(blob => {
+          URL.revokeObjectURL(objUrl);
+          if (!blob) { reject(new Error('照片壓縮失敗，請重新選擇')); return; }
+          console.log('[compress] 原圖 ' + iw + 'x' + ih +
+            ' → 畫布 ' + outW + 'x' + outH + '（圖 ' + drawW + 'x' + drawH +
+            '，白邊 ' + padSide + ' ' + padPx + 'px），約 ' + Math.round(blob.size / 1024) + ' KB');
+          resolve({ blob: blob, thumb: makeThumb(cv), cropText: cropText, cropBad: bad });
+        }, 'image/jpeg', JPEG_Q);
+      } catch (err) {
+        URL.revokeObjectURL(objUrl);
+        reject(err);
       }
-    } catch (err) {
-      console.error('[compress] 處理失敗：', err);
-      toast('照片處理失敗：' + err.message, 'err');
-    } finally {
-      if (done) done();  // 釋放 objectURL
-    }
-  };
+    };
 
-  img.onerror = () => {
-    console.error('[compress] 照片解碼失敗（格式不支援或檔案損毀）');
-    toast('照片無法讀取，可能是格式不支援（如 HEIC），請改用 JPEG 或重拍', 'err');
-    if (done) done();
-  };
+    img.onerror = () => {
+      console.error('[compress] 照片解碼失敗（格式不支援或檔案損毀）');
+      URL.revokeObjectURL(objUrl);
+      reject(new Error('照片無法讀取，可能是格式不支援（如 HEIC），請改用 JPEG 或重拍'));
+    };
 
-  img.src = src;
+    img.src = objUrl;
+  }));
+  compressChain = job.catch(() => {});   // 前一張失敗不能卡住後面的
+  return job;
+}
+
+/* 清單縮圖：直接縮小已經補好白邊的成品，師傅看到的就是最後會歸檔的樣子 */
+function makeThumb(src) {
+  thumbCv.width  = THUMB_W;
+  thumbCv.height = Math.round(THUMB_W / BOX_RATIO);
+  thumbCv.getContext('2d').drawImage(src, 0, 0, thumbCv.width, thumbCv.height);
+  return thumbCv.toDataURL('image/jpeg', 0.7);
 }
 
 /* ============================================================
- * 上傳
+ * 批次上傳：一張接一張「依序」呼叫後端 uploadPhoto
+ * ★不可改成並發★ uploadPhoto 內有 LockService（月初建分頁、建資料夾），
+ * 同時送多張會互相等鎖，逾時後整批失敗。
+ *
  * ① res 結構防呆（後端若回傳非預期格式不會讓前端炸掉）
- * ② withFailureHandler 記錄實際錯誤內容（舊版只顯示「連線失敗」，
- *    看不出是逾時、權限還是後端 throw，之後查 log 就有依據）
+ * ② withFailureHandler 記錄實際錯誤內容（看得出是逾時、權限還是後端 throw）
  * ③ ym 依拍攝日優先（見 nowYm / ymFromYmd 說明）
+ * ④ payload 形狀與舊版單張上傳完全相同；item 一律是 MENU_TREE 的 desc（定位鍵），
+ *    不是顯示用的 label（兩者在有「錯字」的項目上不一樣，見 CLAUDE.md P-4）
+ * ⑤ 失敗的留在清單上可重傳；只有全部成功才清空，免得師傅在機房拍的照片白拍
+ * ⑥ 連續 NET_FAIL_MAX 次「連線失敗」就暫停，別在斷網時一張張等逾時
  * ============================================================ */
-$('upBtn').onclick = () => {
-  if (!currentDataUrl) return;
-  $('upBtn').disabled = true;
-  $('upBtn').textContent = '上傳中…';
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload  = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error('照片讀取失敗'));
+    fr.readAsDataURL(blob);
+  });
+}
 
-  const payload = {
-    room: $('room').value,
-    equip: $('equip').value,
-    item: $('item').value,
-    // ★v6 A 方案★ Drive 資料夾年月：有拍攝日用拍攝日，否則用上傳當天
-    ym: currentShotYmd ? ymFromYmd(currentShotYmd) : nowYm(),
-    shotYmd: currentShotYmd || '',   // 後端據此決定施工/完工日期與月份分頁
-    dataUrl: currentDataUrl
-  };
-  console.log('[upload] 開始上傳：' + payload.room + ' / ' + payload.equip + ' / ' + payload.item + ' / ' + payload.ym);
+function runUpload(payload) {
+  return new Promise(resolve => {
+    google.script.run
+      .withSuccessHandler(res => {
+        resolve((res && typeof res === 'object') ? res : { ok: false, error: '後端回傳格式異常' });
+      })
+      .withFailureHandler(err => {
+        console.error('[upload] 連線/執行失敗：', err);
+        resolve({ ok: false, net: true, error: '連線失敗：' + (err && err.message ? err.message : '請重試') });
+      })
+      .uploadPhoto(payload);
+  });
+}
 
-  const resetBtn = () => {
-    $('upBtn').disabled = false;
-    $('upBtn').textContent = '上傳並歸檔';
-  };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  google.script.run
-    .withSuccessHandler(res => {
-      resetBtn();
-      if (res && res.ok) {
-        uploadedCount++;
-        console.log('[upload] 成功：' + res.name + '（第 ' + uploadedCount + ' 張）');
-        toast('已歸檔：' + res.name + ' | ' + (res.where || ''), 'ok');
-        $('preview').style.display = 'none';
-        $('shotInfo').style.display = 'none';
-        currentDataUrl = null;
-        currentShotYmd = null;
-        $('camInput').value = '';
-        $('galInput').value = '';
-        $('count').textContent = '本次已上傳 ' + uploadedCount + ' 張';
-        $('count').classList.add('show');
-        updateStepper();
-      } else {
-        const msg = (res && res.error) ? res.error : '後端回傳格式異常';
-        console.error('[upload] 後端回報失敗：', res);
-        toast('上傳失敗：' + msg, 'err');
-      }
-    })
-    .withFailureHandler(err => {
-      resetBtn();
-      console.error('[upload] 連線/執行失敗：', err);
-      toast('連線失敗：' + (err && err.message ? err.message : '請重試'), 'err');
-    })
-    .uploadPhoto(payload);
-};
+/* 後端 where 形如「202610!A512 | 容器404x330 | CellImage | 已入格 | …」，清單只取落點（多槽位再加槽位） */
+function shortWhere(w) {
+  const p = String(w || '').split(' | ');
+  return p[0] + (p[1] && p[1].indexOf('槽位') === 0 ? '（' + p[1] + '）' : '');
+}
+
+/* 上傳期間手機螢幕睡著會讓頁面暫停、佇列停擺。盡力而為：HtmlService 的 iframe 可能不允許，
+ * 被拒絕就算了（畫面上另有「請保持螢幕開啟」提示）。 */
+async function lockScreen() {
+  try {
+    if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) {
+    console.warn('[wakeLock] 不支援或被拒絕（不影響上傳）：', e && e.message);
+  }
+}
+function unlockScreen() {
+  try {
+    if (wakeLock) wakeLock.release();
+  } catch (e) {
+    console.warn('[wakeLock] 釋放失敗（不影響上傳）：', e && e.message);
+  }
+  wakeLock = null;
+}
+
+async function uploadAll() {
+  if (uploading) return;
+  const queue = pendingTasks();
+  if (queue.length === 0) return;
+  const room = $('room').value, equip = $('equip').value;   // 上傳期間下拉已鎖住，這裡先存起來更保險
+
+  uploading = true;
+  tasks.forEach(paintTask);          // 上傳期間所有「拍照/選圖」按鈕鎖住
+  paintSummary();
+  $('prog').hidden = false;
+  $('progFill').style.width = '4%';
+  lockScreen();
+
+  let okN = 0, netFail = 0, aborted = false;
+  for (let i = 0; i < queue.length; i++) {
+    const t = queue[i];
+    $('upAllTxt').textContent = '正在上傳 ' + (i + 1) + '/' + queue.length + '…';
+    t.status = 'uploading'; t.error = '';
+    paintTask(t);
+
+    let res;
+    try {
+      const dataUrl = await blobToDataUrl(t.blob);   // 上傳當下才轉 base64，用完即丟
+      console.log('[upload] 開始上傳：' + room + ' / ' + equip + ' / ' + t.desc);
+      res = await runUpload({
+        room: room,
+        equip: equip,
+        item: t.desc,
+        // ★v6 A 方案★ Drive 資料夾年月：有拍攝日用拍攝日，否則用上傳當天
+        ym: t.shotYmd ? ymFromYmd(t.shotYmd) : nowYm(),
+        shotYmd: t.shotYmd || '',   // 後端據此決定施工/完工日期與月份分頁
+        dataUrl: dataUrl
+      });
+    } catch (err) {
+      console.error('[upload] 上傳前處理失敗：', err);
+      res = { ok: false, error: '照片讀取失敗，請重拍這一張' };
+    }
+
+    if (res.ok) {
+      t.status = 'done'; t.blob = null;          // 釋放這張的 Blob；縮圖留著給師傅對照
+      t.where = shortWhere(res.where);
+      okN++; netFail = 0;
+      console.log('[upload] 成功：' + (res.name || t.desc) + '（本次第 ' + (uploadedCount + okN) + ' 張）');
+    } else {
+      t.status = 'failed';
+      t.error = res.error || '後端回傳格式異常';
+      netFail = res.net ? netFail + 1 : 0;
+      console.error('[upload] 失敗：' + t.desc, res);
+    }
+    $('progFill').style.width = Math.max(4, Math.round((i + 1) / queue.length * 100)) + '%';
+    paintTask(t);
+    paintSummary();
+    if (netFail >= NET_FAIL_MAX) { aborted = true; break; }
+  }
+  unlockScreen();
+
+  uploadedCount += okN;
+  if (uploadedCount > 0) {
+    $('count').textContent = '本次已上傳 ' + uploadedCount + ' 張';
+    $('count').classList.add('show');
+  }
+
+  const left = pendingTasks().length;
+  if (left === 0) {
+    toast('已全部歸檔，共 ' + okN + ' 張', 'ok');
+    await sleep(1200);               // 讓師傅看到最後一個打勾，再清空
+    uploading = false;
+    showList();                      // 同一設備重新展開空白清單，並重新查雲端狀態
+  } else {
+    uploading = false;
+    const failN = tasks.filter(t => t.status === 'failed').length;
+    groups.forEach(g => { if (g.el && g.tasks.some(t => t.status === 'failed')) g.el.open = true; });
+    toast(aborted
+      ? '網路似乎不穩，先停在這裡。已成功 ' + okN + ' 張，還有 ' + left + ' 張留在清單上，網路好了再按「重新上傳」'
+      : '成功 ' + okN + ' 張、' + failN + ' 張失敗（原因標在該項目下），失敗的留在清單上，可再按「重新上傳」', 'err');
+    tasks.forEach(paintTask);
+    paintSummary();
+  }
+  $('prog').hidden = true;
+}
+$('upAllBtn').onclick = uploadAll;
 
 /* ============================================================
  * Toast 提示
